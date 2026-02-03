@@ -1,0 +1,89 @@
+import sys
+import argparse
+import re
+import json
+import time
+from owlready2 import get_ontology
+
+
+def dump_owl_term(ontology, term_id):
+    props_for_dump = ["label", "hasRelatedSynonym", "inSubset", "comment"]
+    dump_str = ""
+    obo = ontology.get_namespace("http://purl.obolibrary.org/obo/Cellosaurus#")
+    term = obo[term_id]
+
+    # props = term.get_properties(term)
+    # for prop in props:
+    #     prop_name = prop.python_name
+    #     if prop_name in props_for_dump:
+    #         dump_str += f"{prop_name}: {prop[term]}\n"
+    for prop in props_for_dump:
+        values = getattr(term, prop)
+        dump_str += f"{prop}: {values}\n"
+
+    return dump_str
+
+def load_target_tsv(tsv_file):
+    mapping_result_dict = {}
+    with open(tsv_file, "r") as f:
+        for line in f:
+            sep_line = line.strip(' \n\r').split('\t')
+            if sep_line[0] in mapping_result_dict:
+                mapping_result_dict[sep_line[0]].append(sep_line[1])
+            else:
+                mapping_result_dict[sep_line[0]] = [sep_line[1]]
+    return mapping_result_dict
+
+def build_prompt(sample, term_str):
+    prompt = f"""Here is metadata of a sample that was used for a biological experiment.
+{sample}
+
+Is the statement below is correct? Output only true or false in lowercase.
+"""
+    if term_str == "":
+        prompt += "Statement:\nThis sample is not a cell line."
+    else:
+        prompt += f"""Statement:
+The sample is a cell line below.
+{term_str}
+"""
+    return prompt
+
+def eval_mappings(ontology, mapping_result_dict, biosample_json_file):
+    with open(biosample_json_file, "r") as f:
+        samples = json.load(f)
+        n = 1
+        for sample in samples:
+            bs_id = sample["accession"]
+            for term_id in mapping_result_dict[bs_id]:
+                if term_id == "":
+                    prompt = build_prompt(sample, "")
+                else:
+                    prompt = build_prompt(sample, dump_owl_term(ontology, term_id))
+                print(prompt)
+    return
+
+def main():
+    parser = argparse.ArgumentParser(description='evaluate ontology mapping results')
+    parser.add_argument('owl_file', help='Path to ontology OWL file')
+    parser.add_argument('evaluation_target_file', help='Path to tsv file containing evaluation target')
+    parser.add_argument('biosample_json_file', help='Path to input biosample JSON file')
+
+    args = parser.parse_args()
+    try:
+        # Load ontology
+        print("Loading ontology...", file=sys.stderr)
+        start_time = time.time()
+        ontology = get_ontology(f"file://{args.owl_file}").load()
+        load_time = time.time() - start_time
+        print(f"Ontology loaded in {load_time:.2f} seconds", file=sys.stderr)
+        # term_id = "CVCL_3526"
+        # print(dump_owl_term(ontology, term_id))
+        mapping_result_dict = load_target_tsv(args.evaluation_target_file)
+        eval_mappings(ontology, mapping_result_dict, args.biosample_json_file)
+    except FileNotFoundError as e:
+        print(f"Error: File not found - {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
