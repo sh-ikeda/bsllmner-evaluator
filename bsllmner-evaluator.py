@@ -4,6 +4,7 @@ import re
 import json
 import time
 import requests
+from math import exp
 from owlready2 import get_ontology
 
 
@@ -23,6 +24,11 @@ def dump_owl_term(ontology, term_id):
         dump_str += f"{prop}: {values}\n"
 
     return dump_str
+
+def get_label(ontology, term_id):
+    ns = ontology.get_namespace("http://purl.obolibrary.org/obo/Cellosaurus#")
+    term = ns[term_id]
+    return term.label
 
 def load_target_tsv(tsv_file):
     mapping_result_dict = {}
@@ -84,8 +90,9 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url):
                     "logprobs": True
                 }
                 response = requests.post(url, headers=headers, json=payload)
-                data = response.json()
-                print(data["choices"])
+                data = response.json()["choices"][0]
+                term_label = get_label(ontology, term_id)
+                print(bs_id, term_id, term_label, data["message"]["content"], exp(data["logprobs"]["content"][0]["logprob"], sep="\t"))
 
     return
 
