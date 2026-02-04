@@ -28,7 +28,7 @@ def dump_owl_term(ontology, term_id):
 def get_label(ontology, term_id):
     ns = ontology.get_namespace("http://purl.obolibrary.org/obo/Cellosaurus#")
     term = ns[term_id]
-    return term.label
+    return term.label[0]
 
 def load_target_tsv(tsv_file):
     mapping_result_dict = {}
@@ -48,7 +48,7 @@ def build_prompt(sample, term_str):
 Is the statement below is correct? Output only true or false in lowercase.
 """
     if term_str == "":
-        prompt += "Statement:\nThis sample is not a cell line."
+        prompt += "Statement:\nThis sample does not mention the specific cell line name that represents the sample itself."
     else:
         prompt += f"""Statement:
 The sample is a cell line below.
@@ -110,12 +110,17 @@ def main():
         print("Loading ontology...", file=sys.stderr)
         start_time = time.time()
         ontology = get_ontology(f"file://{args.owl_file}").load()
-        load_time = time.time() - start_time
-        print(f"Ontology loaded in {load_time:.2f} seconds", file=sys.stderr)
+        total_time = time.time() - start_time
+        print(f"Ontology loaded in {total_time:.2f} seconds", file=sys.stderr)
         # term_id = "CVCL_3526"
         # print(dump_owl_term(ontology, term_id))
         mapping_result_dict = load_target_tsv(args.evaluation_target_file)
+
+        print("Performing evaluation...", file=sys.stderr)
+        start_time = time.time()
         eval_mappings(ontology, mapping_result_dict, args.biosample_json_file, args.url)
+        total_time = time.time() - start_time
+        print(f"Evaluation completed in {total_time:.2f} seconds", file=sys.stderr)
     except FileNotFoundError as e:
         print(f"Error: File not found - {e}", file=sys.stderr)
         sys.exit(1)
