@@ -3,14 +3,15 @@ import argparse
 import re
 import json
 import time
+import requests
 from owlready2 import get_ontology
 
 
 def dump_owl_term(ontology, term_id):
     props_for_dump = ["label", "hasRelatedSynonym", "inSubset", "comment"]
     dump_str = ""
-    obo = ontology.get_namespace("http://purl.obolibrary.org/obo/Cellosaurus#")
-    term = obo[term_id]
+    ns = ontology.get_namespace("http://purl.obolibrary.org/obo/Cellosaurus#")
+    term = ns[term_id]
 
     # props = term.get_properties(term)
     # for prop in props:
@@ -49,10 +50,9 @@ The sample is a cell line below.
 """
     return prompt
 
-def eval_mappings(ontology, mapping_result_dict, biosample_json_file):
+def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url):
     with open(biosample_json_file, "r") as f:
         samples = json.load(f)
-        n = 1
         for sample in samples:
             bs_id = sample["accession"]
             for term_id in mapping_result_dict[bs_id]:
@@ -60,7 +60,33 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file):
                     prompt = build_prompt(sample, "")
                 else:
                     prompt = build_prompt(sample, dump_owl_term(ontology, term_id))
-                print(prompt)
+                # print(prompt)
+                headers = {
+                    "Content-Type": "application/json"
+                }
+
+                payload = {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    "chat_template_kwargs": {
+                        "enable_thinking": False
+                    },
+                    "response_format": {
+                        "type": "json_object",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    "logprobs": True
+                }
+                response = requests.post(url, headers=headers, json=payload)
+                data = response.json()
+                print(data["choices"])
+
     return
 
 def main():
@@ -68,6 +94,7 @@ def main():
     parser.add_argument('owl_file', help='Path to ontology OWL file')
     parser.add_argument('evaluation_target_file', help='Path to tsv file containing evaluation target')
     parser.add_argument('biosample_json_file', help='Path to input biosample JSON file')
+    parser.add_argument('url', help='URL of llama.cpp endpoint')
 
     args = parser.parse_args()
     try:
@@ -80,7 +107,7 @@ def main():
         # term_id = "CVCL_3526"
         # print(dump_owl_term(ontology, term_id))
         mapping_result_dict = load_target_tsv(args.evaluation_target_file)
-        eval_mappings(ontology, mapping_result_dict, args.biosample_json_file)
+        eval_mappings(ontology, mapping_result_dict, args.biosample_json_file, args.url)
     except FileNotFoundError as e:
         print(f"Error: File not found - {e}", file=sys.stderr)
         sys.exit(1)
