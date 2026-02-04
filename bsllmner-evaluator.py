@@ -64,8 +64,10 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url):
             for term_id in mapping_result_dict[bs_id]:
                 if term_id == "":
                     prompt = build_prompt(sample, "")
+                    term_label = ""
                 else:
                     prompt = build_prompt(sample, dump_owl_term(ontology, term_id))
+                    term_label = get_label(ontology, term_id)
                 # print(prompt)
                 headers = {
                     "Content-Type": "application/json"
@@ -91,8 +93,7 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url):
                 }
                 response = requests.post(url, headers=headers, json=payload)
                 data = response.json()["choices"][0]
-                term_label = get_label(ontology, term_id)
-                print(bs_id, term_id, term_label, data["message"]["content"], exp(data["logprobs"]["content"][0]["logprob"], sep="\t"))
+                print(bs_id, term_id, term_label, data["message"]["content"], exp(data["logprobs"]["content"][0]["logprob"]), sep="\t")
 
     return
 
