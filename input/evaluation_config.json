@@ -1,0 +1,6 @@
+{
+    "ontology_file": "input/cellosaurus.mod.owl",
+    "base_uri": "http://purl.obolibrary.org/obo/Cellosaurus#",
+    "prompt_mapped": "Here is metadata of a sample that was used for a biological experiment.\n\n{sample}\n\nIs the statement below about this sample correct? Output only true or false in lowercase.\nStatement:\n\"This sample is a specific cell line and has not undergone any processing such as differentiation.\"\nAND\n\"The following ontology term is appropriate to use as the cell line representing this sample itself.\"\nTerm:\n{term}",
+    "prompt_non_mapped": "Here is metadata of a sample that was used for a biological experiment.\n\n{sample}\n\nIs the statement below about this sample correct? Output only true or false in lowercase.\nStatement:\n\"This sample metadata does not mention the specific cell line name that represents the sample itself.\"\nOR\n\"This sample metadata mentions a cell line name but the sample was differentiated from the cell line.\""
+}
