@@ -77,7 +77,6 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                     "logprobs": True
                 }
                 print(prompt)
-                continue
                 response = requests.post(url, headers=headers, json=payload)
                 data = response.json()["choices"][0]
                 print(bs_id, term_id, term_label, data["message"]["content"], exp(data["logprobs"]["content"][0]["logprob"]), sep="\t")
