@@ -7,8 +7,7 @@ from math import exp
 from owlready2 import get_ontology
 
 
-def dump_owl_term(ontology, term_id, base_uri):
-    props_for_dump = ["label", "hasRelatedSynonym", "inSubset", "comment"]
+def dump_owl_term(ontology, term_id, base_uri, props_for_dump):
     dump_str = ""
     ns = ontology.get_namespace(base_uri)
     term = ns[term_id]
@@ -55,7 +54,7 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                     prompt = build_prompt(sample, "", config)
                     term_label = ""
                 else:
-                    prompt = build_prompt(sample, dump_owl_term(ontology, term_id, config["base_uri"]), config)
+                    prompt = build_prompt(sample, dump_owl_term(ontology, term_id, config["base_uri"], config["props_for_dump"]), config)
                     term_label = get_label(ontology, term_id, config["base_uri"])
 
                 payload = {
