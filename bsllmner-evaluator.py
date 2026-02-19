@@ -91,6 +91,7 @@ def main():
     parser.add_argument("-r", '--evaluation_target_file', help='Path to tsv file containing evaluation target', required=True)
     parser.add_argument("-b", '--biosample_json_file', help='Path to input biosample JSON file', required=True)
     parser.add_argument("-c", '--config_file', help='Path to config file', required=True)
+    parser.add_argument("-a", '--config_attr', help='Attribute name, defined in config file, to be used for this run ', required=True)
     parser.add_argument("-u", '--url', help='URL of llama.cpp endpoint', required=True)
 
     args = parser.parse_args()
@@ -98,7 +99,7 @@ def main():
         # Load ontology
         print("Loading ontology...", file=sys.stderr)
         start_time = time.time()
-        config = load_config(args.config_file)
+        config = load_config(args.config_file)[args.config_attr]
         ontology_file = config["ontology_file"]
         ontology = get_ontology(f"file://{ontology_file}").load()
         total_time = time.time() - start_time
