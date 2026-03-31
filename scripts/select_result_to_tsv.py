@@ -16,15 +16,16 @@ def main():
             mapped_id = ""
             mapped_label = ""
             if attr in results:
-                for extracted_str in results[attr]:
-                    if "term_id" in results[attr][extracted_str]:
-                        mapped_id = results[attr][extracted_str]["term_id"]
-                        mapped_label = results[attr][extracted_str]["label"]
+                for mapped_term in results[attr]:
+                    if "term_id" in mapped_term:
+                        mapped_id = mapped_term["term_id"]
+                        mapped_label = mapped_term["label"]
+                        extracted_str = mapped_term["value"]
                     print(sample_id, extracted_str, mapped_id, mapped_label, sep="\t")
                 if not results[attr]:
-                    print(sample_id, sample["extract_output"][attr], "", "", sep="\t")
+                    print(sample_id, "", "", "", sep="\t")
             else:
-                print(sample_id, "", "", "", sep="\t")
+                print(sample_id, sample["extract"]["extracted"][attr], "", "", sep="\t")
     return
 
 if __name__ == "__main__":
