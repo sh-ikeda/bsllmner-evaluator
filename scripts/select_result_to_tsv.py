@@ -12,6 +12,7 @@ def main():
         samples = json.load(f)
         for sample in samples:
             results = sample["results"]
+            sample_id = sample["extract"]["accession"]
             mapped_id = ""
             mapped_label = ""
             if attr in results:
@@ -19,11 +20,11 @@ def main():
                     if "term_id" in results[attr][extracted_str]:
                         mapped_id = results[attr][extracted_str]["term_id"]
                         mapped_label = results[attr][extracted_str]["label"]
-                    print(sample["accession"], extracted_str, mapped_id, mapped_label, sep="\t")
+                    print(sample_id, extracted_str, mapped_id, mapped_label, sep="\t")
                 if not results[attr]:
-                    print(sample["accession"], sample["extract_output"][attr], "", "", sep="\t")
+                    print(sample_id, sample["extract_output"][attr], "", "", sep="\t")
             else:
-                print(sample["accession"], "", "", "", sep="\t")
+                print(sample_id, "", "", "", sep="\t")
     return
 
 if __name__ == "__main__":
