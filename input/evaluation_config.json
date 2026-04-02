@@ -12,5 +12,26 @@
         "props_for_dump": ["label", "hasExactSynonym", "hasRelatedSynonym", "hasBroadSynonym"],
         "prompt_mapped": "Here is metadata of a sample that was used for a biological experiment.\n\n{sample}\n\nIs the statement below about this sample correct? Output only true or false in lowercase.\nStatement:\n\"The following ontology term is appropriate to be used as the cell type representing this sample itself.\"\nTerm:\n{term}",
         "prompt_non_mapped": "Here is metadata of a sample that was used for a biological experiment.\n\n{sample}\n\nIs the statement below about this sample correct? Output only true or false in lowercase.\nStatement:\n\"This sample metadata does not mention the specific cell type that represents the sample itself.\"\nOR\n\"This sample metadata mention the cell type but it is about cell line.\""
+    },
+    "disease": {
+        "ontology_file": "input/mondo.owl",
+        "base_uri": "http://purl.obolibrary.org/obo/",
+        "props_for_dump": ["label", "hasExactSynonym", "hasRelatedSynonym", "hasBroadSynonym", "definition"],
+        "prompt_mapped": "Here is metadata of a sample that was used for a biological experiment.\n\n{sample}\n\nIs the statement below about this sample correct? Output only true or false in lowercase.\nStatement:\n\"The following ontology term is appropriate to be used as the disease representing this sample itself.\"\nTerm:\n{term}",
+        "prompt_non_mapped": "Here is metadata of a sample that was used for a biological experiment.\n\n{sample}\n\nIs the statement below about this sample correct? Output only true or false in lowercase.\nStatement:\n\"This sample metadata does not mention the specific disease that represents the sample itself.\""
+    },
+    "drug": {
+        "ontology_file": "input/chebi.owl",
+        "base_uri": "http://purl.obolibrary.org/obo/",
+        "props_for_dump": ["label", "hasExactSynonym", "hasRelatedSynonym", "comment"],
+        "prompt_mapped": "Here is metadata of a sample that was used for a biological experiment.\n\n{sample}\n\nIs the statement below about this sample correct? Output only true or false in lowercase.\nStatement:\n\"The following ontology term is appropriate to be used as the representation of the drug with which this sample was treated.\"\nTerm:\n{term}",
+        "prompt_non_mapped": "Here is metadata of a sample that was used for a biological experiment.\n\n{sample}\n\nIs the statement below about this sample correct? Output only true or false in lowercase.\nStatement:\n\"This sample metadata does not mention the specific drug name that was used to treat the sample.\""
+    },
+    "tissue": {
+        "ontology_file": "input/uberon.owl",
+        "base_uri": "http://purl.obolibrary.org/obo/",
+        "props_for_dump": ["label", "hasExactSynonym", "hasRelatedSynonym", "hasBroadSynonym", "definition"],
+        "prompt_mapped": "Here is metadata of a sample that was used for a biological experiment.\n\n{sample}\n\nIs the statement below about this sample correct? Output only true or false in lowercase.\nStatement:\n\"The following ontology term is appropriate to be used as the tissue representing this sample itself.\"\nTerm:\n{term}",
+        "prompt_non_mapped": "Here is metadata of a sample that was used for a biological experiment.\n\n{sample}\n\nIs the statement below about this sample correct? Output only true or false in lowercase.\nStatement:\n\"This sample metadata does not mention the specific tissue that represents the sample itself.\""
     }
 }
