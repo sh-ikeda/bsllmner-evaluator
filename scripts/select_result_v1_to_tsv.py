@@ -21,7 +21,12 @@ def main():
                         mapped_label = results[attr][extracted_str]["label"]
                     print(sample["accession"], extracted_str, mapped_id, mapped_label, sep="\t")
                 if not results[attr]:
-                    print(sample["accession"], sample["extract_output"][attr], "", "", sep="\t")
+                    extracted_strs = sample["extract_output"][attr]
+                    if isinstance(extracted_strs, list):
+                        for extracted_str in extracted_strs:
+                            print(sample["accession"], extracted_str, "", "", sep="\t")
+                    else:
+                        print(sample["accession"], extracted_strs, "", "", sep="\t")
             else:
                 print(sample["accession"], "", "", "", sep="\t")
     return
