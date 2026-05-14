@@ -24,6 +24,10 @@ def main():
                     print(sample_id, extracted_str, mapped_id, mapped_label, sep="\t")
                 if not results[attr]:
                     print(sample_id, "", "", "", sep="\t")
+            ## LLM の json 出力指定が効いていれば extracted が null にはならないはずだが、何らかのエラーでたまにある。
+            elif sample["extract"]["extracted"] is None:
+                print(sample_id, "(null)", "", "", sep="\t")
+            ##
             else:
                 print(sample_id, sample["extract"]["extracted"][attr], "", "", sep="\t")
     return
