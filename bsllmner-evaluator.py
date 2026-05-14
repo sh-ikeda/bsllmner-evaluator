@@ -5,6 +5,7 @@ import time
 import requests
 from math import exp
 from owlready2 import get_ontology
+from pathlib import Path
 
 
 def dump_owl_term(ontology, term_id, base_uri, props_for_dump):
@@ -101,7 +102,8 @@ def main():
         start_time = time.time()
         config = load_config(args.config_file)[args.config_attr]
         ontology_file = config["ontology_file"]
-        ontology = get_ontology(f"file://{ontology_file}").load()
+        base_dir = Path(__file__).resolve().parent
+        ontology = get_ontology(f"file://{base_dir}/{ontology_file}").load()
         total_time = time.time() - start_time
         print(f"Ontology loaded in {total_time:.2f} seconds", file=sys.stderr)
         mapping_result_dict = load_target_tsv(args.evaluation_target_file)
