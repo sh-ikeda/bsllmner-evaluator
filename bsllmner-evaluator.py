@@ -14,7 +14,11 @@ def dump_owl_term(ontology, term_id, base_uri, props_for_dump):
     term = ns[term_id]
 
     for prop in props_for_dump:
-        values = getattr(term, prop)
+        try:
+            values = getattr(term, prop)
+        except AttributeError as e:
+            print(f"Error: {term}: {prop} is not found in the ontology ({e})", file=sys.stderr)
+            continue
         dump_str += f"  {prop}: {values}\n"
 
     return dump_str
