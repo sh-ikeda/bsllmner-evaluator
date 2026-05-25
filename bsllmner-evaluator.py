@@ -104,7 +104,16 @@ def main():
         # Load ontology
         print("Loading ontology...", file=sys.stderr)
         start_time = time.time()
-        config = load_config(args.config_file)[args.config_attr]
+        configs = load_config(args.config_file)
+        if args.config_attr not in configs:
+            available_attrs = ", ".join(sorted(configs.keys()))
+            print(
+                f"Error: Attribute '{args.config_attr}' is not defined in {args.config_file}. "
+                f"Available attributes: {available_attrs}",
+                file=sys.stderr
+            )
+            sys.exit(1)
+        config = configs[args.config_attr]
         ontology_file = config["ontology_file"]
         base_dir = Path(__file__).resolve().parent
         ontology = get_ontology(f"file://{base_dir}/{ontology_file}").load()
