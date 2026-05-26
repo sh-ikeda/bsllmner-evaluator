@@ -47,6 +47,19 @@ def build_prompt(sample, term_str, config):
     prompt = prompt.replace("{sample}", json.dumps(sample, indent=4)).replace("{term}", term_str)
     return prompt
 
+def calc_normalized_bool_prob(decision, top_logprobs):
+    bool_probs = {"true": 0.0, "false": 0.0}
+    for item in top_logprobs:
+        token = item["token"]
+        if token in bool_probs:
+            bool_probs[token] += exp(item["logprob"])
+
+    decision = decision.strip().lower()
+    total = bool_probs["true"] + bool_probs["false"]
+    if decision not in bool_probs or total == 0:
+        return ""
+    return bool_probs[decision] / total
+
 def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, config):
     headers = {"Content-Type": "application/json"}
 
@@ -78,11 +91,21 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                             "type": "boolean"
                         }
                     },
+                    "temperature": 0,
                     "logprobs": True
                 }
                 response = requests.post(url, headers=headers, json=payload)
                 data = response.json()["choices"][0]
-                print(bs_id, term_id, term_label, data["message"]["content"], exp(data["logprobs"]["content"][0]["logprob"]), sep="\t")
+                content = data["message"]["content"]  # true / false
+                first_token_logprobs = data["logprobs"]["content"][0]
+                emitted_token_prob = exp(first_token_logprobs["logprob"])
+                normalized_bool_prob = calc_normalized_bool_prob(content, first_token_logprobs["top_logprobs"])
+                if normalized_bool_prob == "":
+                    print(
+                        f"Warning: Could not calculate normalized boolean probability for {bs_id}\t{term_id}\t{content}",
+                        file=sys.stderr
+                    )
+                print(bs_id, term_id, term_label, content, round(emitted_token_prob, 3), round(normalized_bool_prob, 3), sep="\t")
 
     return
 
