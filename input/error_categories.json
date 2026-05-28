@@ -1,0 +1,50 @@
+[
+  {
+    "id": "wrong_entity",
+    "description": "The selected ontology term represents a different entity from the one described in the BioSample metadata."
+  },
+  {
+    "id": "wrong_attribute_type",
+    "description": "The selected entity is related to the sample, but it belongs to the wrong attribute type, such as disease versus tissue or cell line versus cell type."
+  },
+  {
+    "id": "too_broad",
+    "description": "The selected ontology term is an overly general ancestor or category for the intended entity."
+  },
+  {
+    "id": "too_narrow",
+    "description": "The selected ontology term is an overly specific subtype or instance that is not supported by the metadata."
+  },
+  {
+    "id": "related_but_not_equivalent",
+    "description": "The selected term is biologically or experimentally related to the metadata but is not an equivalent annotation for the sample."
+  },
+  {
+    "id": "partial_match",
+    "description": "The selected term only covers part of a composite expression and loses important meaning from the original metadata."
+  },
+  {
+    "id": "ambiguous_input_overresolved",
+    "description": "The input text is ambiguous or too short, but the pipeline resolved it to a specific ontology term without enough evidence."
+  },
+  {
+    "id": "negation_or_control_misread",
+    "description": "The pipeline treated negated, control, untreated, wild-type, none, or not-applicable metadata as a positive entity annotation."
+  },
+  {
+    "id": "insufficient_evidence",
+    "description": "The BioSample metadata does not provide enough evidence to support the selected mapping."
+  },
+  {
+    "id": "ontology_gap_or_version_issue",
+    "description": "The error appears to be caused by a missing, obsolete, or version-mismatched ontology term, leading to a near but incorrect mapping."
+  },
+  {
+    "id": "missing_mapping",
+    "description": "The pipeline produced no final ontology mapping even though the BioSample metadata appears to contain a mappable entity for the evaluated attribute."
+  },
+  {
+    "id": "other",
+    "description": "The error does not fit the other categories."
+  }
+]

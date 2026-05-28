@@ -7,11 +7,19 @@ python bsllmner-evaluator.py -c input/evaluation_config.json -r bsllmner-result.
 ```
 The llama.cpp server is assumed to be listening at the port 11438.
 
+The `-r` input can also be a bsllmner-mk2 select-output JSON file:
+
+```
+python bsllmner-evaluator.py -c input/evaluation_config.json -r examples/select_output_sample.json -a attr -b biosample.json -u http://localhost:11438/v1/chat/completions
+```
+
 ## Arguments
 `-c`: Path to evaluation_config.json
-`-r`: Path to the tsv file, converted from the output of bsllmner-mk2.
+`-r`: Path to the TSV file converted from bsllmner-mk2 output, or to a bsllmner-mk2 select-output JSON file.
+`--evaluation_target_format`: Input format for `-r`: `auto`, `tsv`, or `json`. Default is `auto`.
 `-a`: The attribute to evaluate in this run, e.g. `cell_line` or `tissue`. The attribute must be defined in `evaluation_config.json`.
 `-b`: Path to the JSON file of the original BioSample datasets.
+`--error_category_file`: Path to the JSON file defining error categories. Default is `input/error_categories.json`.
 
 ## Format
 ### BioSample JSON
@@ -41,12 +49,14 @@ SAMD00009960	CVCL_0597
 Pairs of BioSample IDs and mapped ontology term IDs
 ### Output
 ```tsv
-SAMD00004141	CVCL_0030	HeLa	true	0.872407853413308
-SAMD00008684	CVCL_0019	SH-SY5Y	false	0.46802984078667004
-SAMD00009960	CVCL_0597	Ramos	true	0.6987498405606526
+SAMD00004141	CVCL_0030	HeLa	true	0.872	0.914
+SAMD00008684	CVCL_0019	SH-SY5Y	false	0.468	0.731	wrong_entity
+SAMD00009960	CVCL_0597	Ramos	true	0.699	0.842
 ```
 - BioSample ID
 - Mapped ontology term ID
 - Mapped ontology term label
 - Decision of this program. Whether the mapping is correct or not.
-- Probability of the `true` or `false` token is output.
+- Probability of the emitted first token.
+- Normalized probability within exactly matching `true` and `false` candidates, when available.
+- Error category ID. This is emitted only when the decision is `false`.
