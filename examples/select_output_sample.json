@@ -1,0 +1,288 @@
+[
+  {
+    "extract": {
+      "accession": "SAMD00009334",
+      "extracted": {
+        "cell_line": "Ramos",
+        "disease": "Burkitt's lymphoma",
+        "drug": [
+          "IgM",
+          "IL-4"
+        ]
+      }
+    },
+    "search_results": {
+      "cell_line": {
+        "Ramos": [
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/Cellosaurus#CVCL_0597",
+            "term_id": "CVCL:0597",
+            "prop_uri": "http://www.w3.org/2000/01/rdf-schema#label",
+            "value": "Ramos",
+            "label": "Ramos",
+            "exact_match": true,
+            "text2term_score": null,
+            "reasoning": "Exact match on rdfs:label",
+            "comments": [
+              "Disease: Burkitt lymphoma"
+            ],
+            "definitions": [
+              "Male Burkitt lymphoma cell line; Category: Cancer cell line; Species of origin: Homo sapiens"
+            ]
+          },
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/Cellosaurus#CVCL_0597",
+            "term_id": "CVCL:0597",
+            "prop_uri": "http://www.geneontology.org/formats/oboInOwl#hasRelatedSynonym",
+            "value": "RAMOS",
+            "label": "Ramos",
+            "exact_match": true,
+            "text2term_score": null,
+            "reasoning": "Exact match on oboInOwl:hasRelatedSynonym",
+            "comments": [
+              "Disease: Burkitt lymphoma"
+            ],
+            "definitions": [
+              "Male Burkitt lymphoma cell line; Category: Cancer cell line; Species of origin: Homo sapiens"
+            ]
+          }
+        ]
+      },
+      "disease": {
+        "Burkitt's lymphoma": [
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/MONDO_0007243",
+            "term_id": "MONDO:0007243",
+            "prop_uri": "http://www.geneontology.org/formats/oboInOwl#hasExactSynonym",
+            "value": "Burkitt's lymphoma",
+            "label": "Burkitt lymphoma",
+            "exact_match": true,
+            "text2term_score": null,
+            "reasoning": "Exact match on oboInOwl:hasExactSynonym",
+            "comments": null,
+            "definitions": [
+              "A rare form of malignant mature B-cell non-Hodgkin lymphoma."
+            ]
+          },
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/MONDO_0003659",
+            "term_id": "MONDO:0003659",
+            "prop_uri": "http://www.geneontology.org/formats/oboInOwl#hasBroadSynonym",
+            "value": "lymphoma",
+            "label": "pediatric lymphoma",
+            "exact_match": false,
+            "text2term_score": null,
+            "reasoning": null,
+            "comments": null,
+            "definitions": [
+              "A Hodgkin or non-Hodgkin lymphoma that occurs during childhood."
+            ]
+          },
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/MONDO_0003660",
+            "term_id": "MONDO:0003660",
+            "prop_uri": "http://www.geneontology.org/formats/oboInOwl#hasBroadSynonym",
+            "value": "lymphoma",
+            "label": "adult lymphoma",
+            "exact_match": false,
+            "text2term_score": null,
+            "reasoning": null,
+            "comments": null,
+            "definitions": [
+              "A lymphoma that occurs in an adult."
+            ]
+          },
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/MONDO_0005062",
+            "term_id": "MONDO:0005062",
+            "prop_uri": "http://www.w3.org/2000/01/rdf-schema#label",
+            "value": "lymphoma",
+            "label": "lymphoma",
+            "exact_match": false,
+            "text2term_score": null,
+            "reasoning": null,
+            "comments": null,
+            "definitions": [
+              "A malignant (clonal) proliferation of B- lymphocytes or T- lymphocytes which involves the lymph nodes, bone marrow and/or extranodal sites. This category includes Non-Hodgkin lymphomas and Hodgkin lymphomas."
+            ]
+          },
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/MONDO_0005062",
+            "term_id": "MONDO:0005062",
+            "prop_uri": "http://www.geneontology.org/formats/oboInOwl#hasExactSynonym",
+            "value": "lymphoma",
+            "label": "lymphoma",
+            "exact_match": false,
+            "text2term_score": null,
+            "reasoning": null,
+            "comments": null,
+            "definitions": [
+              "A malignant (clonal) proliferation of B- lymphocytes or T- lymphocytes which involves the lymph nodes, bone marrow and/or extranodal sites. This category includes Non-Hodgkin lymphomas and Hodgkin lymphomas."
+            ]
+          }
+        ]
+      },
+      "drug": {
+        "IgM": [],
+        "IL-4": [
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/CHEBI_63895",
+            "term_id": "CHEBI:63895",
+            "prop_uri": "http://www.geneontology.org/formats/oboInOwl#hasRelatedSynonym",
+            "value": "IL",
+            "label": "ionic liquid",
+            "exact_match": false,
+            "text2term_score": null,
+            "reasoning": null,
+            "comments": [
+              "application: polar solvent",
+              "chemical role: polar solvent"
+            ],
+            "definitions": [
+              "Any salt, particularly one with a low melting point, that can be used in the liquid phase as a solvent."
+            ]
+          },
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/CHEBI_74072",
+            "term_id": "CHEBI:74072",
+            "prop_uri": "http://www.geneontology.org/formats/oboInOwl#hasRelatedSynonym",
+            "value": "IL",
+            "label": "Ile-Leu",
+            "exact_match": false,
+            "text2term_score": null,
+            "reasoning": null,
+            "comments": [
+              "biological role: metabolite"
+            ],
+            "definitions": [
+              "A dipeptide formed from <small>L</small>-isoleucine and <small>L</small>-leucine residues."
+            ]
+          }
+        ]
+      }
+    },
+    "text2term_results": {
+      "cell_line": {},
+      "disease": {},
+      "drug": {
+        "IgM": [
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/CHEBI_66068",
+            "term_id": "CHEBI:66068",
+            "prop_uri": "http://www.w3.org/2000/01/rdf-schema#label",
+            "value": "igalan",
+            "label": "igalan",
+            "exact_match": false,
+            "text2term_score": 0.377,
+            "reasoning": "text2term score: 0.38",
+            "comments": [
+              "application: antineoplastic agent",
+              "biological role: metabolite"
+            ],
+            "definitions": [
+              "A sesquiterpene lactone that is  hexahydro-1-benzofuran-2(3<em>H</em>)-one substituted by a methyl group at position 6, methylene group at position 3, isopropenyl group at position 5 and a vinyl group at position 6. Isolated from <em>Inula helenium</em> and <em>Rudbeckia laciniata</em>, it exhibits antiproliferative activity."
+            ]
+          },
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/CHEBI_230432",
+            "term_id": "CHEBI:230432",
+            "prop_uri": "http://www.w3.org/2000/01/rdf-schema#label",
+            "value": "Iganidipine",
+            "label": "Iganidipine",
+            "exact_match": false,
+            "text2term_score": 0.308,
+            "reasoning": "text2term score: 0.31",
+            "comments": null,
+            "definitions": null
+          },
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/CHEBI_206461",
+            "term_id": "CHEBI:206461",
+            "prop_uri": "http://www.w3.org/2000/01/rdf-schema#label",
+            "value": "Poricoic acid GM",
+            "label": "Poricoic acid GM",
+            "exact_match": false,
+            "text2term_score": 0.306,
+            "reasoning": "text2term score: 0.31",
+            "comments": null,
+            "definitions": null
+          }
+        ],
+        "IL-4": [
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/CHEBI_34936",
+            "term_id": "CHEBI:34936",
+            "prop_uri": "http://www.w3.org/2000/01/rdf-schema#label",
+            "value": "propanil",
+            "label": "propanil",
+            "exact_match": false,
+            "text2term_score": 0.354,
+            "reasoning": "text2term score: 0.35",
+            "comments": [
+              "application: herbicide"
+            ],
+            "definitions": [
+              "An anilide resulting from the formal condensation of the carboxy group of propanoic acid with the amino group of 3,4-dichloroaniline. It is a herbicide used for the treatment of numerous grasses and broad-leaved weeds in rice, potatoes, and wheat."
+            ]
+          },
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/CHEBI_34919",
+            "term_id": "CHEBI:34919",
+            "prop_uri": "http://www.w3.org/2000/01/rdf-schema#label",
+            "value": "Phenylamil",
+            "label": "Phenylamil",
+            "exact_match": false,
+            "text2term_score": 0.327,
+            "reasoning": "text2term score: 0.33",
+            "comments": null,
+            "definitions": null
+          },
+          {
+            "term_uri": "http://purl.obolibrary.org/obo/CHEBI_17568",
+            "term_id": "CHEBI:17568",
+            "prop_uri": "http://www.w3.org/2000/01/rdf-schema#label",
+            "value": "uracil",
+            "label": "uracil",
+            "exact_match": false,
+            "text2term_score": 0.324,
+            "reasoning": "text2term score: 0.32",
+            "comments": [
+              "application: prodrug",
+              "biological role: Daphnia magna metabolite",
+              "biological role: Escherichia coli metabolite",
+              "biological role: Saccharomyces cerevisiae metabolite",
+              "biological role: allergen",
+              "biological role: human metabolite",
+              "biological role: mouse metabolite"
+            ],
+            "definitions": [
+              "A common and naturally occurring pyrimidine nucleobase in which the pyrimidine ring is substituted with two oxo groups at positions 2 and 4. Found in RNA, it base pairs with adenine and replaces thymine during DNA transcription."
+            ]
+          }
+        ]
+      }
+    },
+    "results": {
+      "cell_line": [
+        {
+          "value": "Ramos",
+          "term_id": "CVCL:0597",
+          "term_uri": "http://purl.obolibrary.org/obo/Cellosaurus#CVCL_0597",
+          "label": "Ramos",
+          "exact_match": true,
+          "reasoning": "Exact match on rdfs:label"
+        }
+      ],
+      "disease": [
+        {
+          "value": "Burkitt's lymphoma",
+          "term_id": "MONDO:0007243",
+          "term_uri": "http://purl.obolibrary.org/obo/MONDO_0007243",
+          "label": "Burkitt lymphoma",
+          "exact_match": true,
+          "reasoning": "Exact match on oboInOwl:hasExactSynonym"
+        }
+      ]
+    }
+  }
+]
