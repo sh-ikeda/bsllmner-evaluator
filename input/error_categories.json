@@ -44,6 +44,10 @@
     "description": "The error appears to be caused primarily by a missing, obsolete, or version-mismatched ontology term rather than by extraction or selection behavior."
   },
   {
+    "id": "evaluator_false_negative",
+    "description": "The previous evaluator judgment is itself wrong: the final ontology mapping is actually appropriate for the BioSample metadata, even though it was judged false."
+  },
+  {
     "id": "other",
     "description": "The error does not fit the other categories."
   }
