@@ -46,12 +46,24 @@ def ontology_local_id(term_id):
 def load_target_tsv(tsv_file):
     mapping_result_dict = {}
     with open(tsv_file, "r") as f:
-        for line in f:
+        for line_number, line in enumerate(f, start=1):
             sep_line = line.strip(' \n\r').split('\t')
+            if len(sep_line) != 3:
+                raise UserInputError(
+                    f"Malformed evaluation target TSV '{tsv_file}' line {line_number}: "
+                    "expected 3 columns: BioSample accession, extracted value, mapped ontology term ID"
+                )
+            accession, extracted_value, term_id = sep_line
+            target = {
+                "term_id": term_id,
+                "term_label": "",
+                "extracted_value": extracted_value,
+                "pipeline_record": None
+            }
             if sep_line[0] in mapping_result_dict:
-                mapping_result_dict[sep_line[0]].append(sep_line[1])
+                mapping_result_dict[accession].append(target)
             else:
-                mapping_result_dict[sep_line[0]] = [sep_line[1]]
+                mapping_result_dict[accession] = [target]
     return mapping_result_dict
 
 def load_target_json(json_file, config_attr):
@@ -103,18 +115,7 @@ def load_targets(target_file, config_attr, target_format):
         target_format = detect_target_file_format(target_file)
     if target_format == "json":
         return load_target_json(target_file, config_attr)
-    return {
-        accession: [
-            {
-                "term_id": term_id,
-                "term_label": "",
-                "extracted_value": "",
-                "pipeline_record": None
-            }
-            for term_id in term_ids
-        ]
-        for accession, term_ids in load_target_tsv(target_file).items()
-    }
+    return load_target_tsv(target_file)
 
 def build_prompt(sample, term_str, config):
     if term_str == "":
@@ -213,6 +214,13 @@ def format_prob(prob):
         return ""
     return round(prob, 3)
 
+def format_tsv_value(value):
+    if value is None:
+        return ""
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
 def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, config, config_attr, error_categories):
     headers = {"Content-Type": "application/json"}
 
@@ -274,6 +282,7 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                 )
             print(
                 bs_id,
+                format_tsv_value(target["extracted_value"]),
                 term_id,
                 term_label,
                 content,

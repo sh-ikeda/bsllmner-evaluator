@@ -42,18 +42,19 @@ python bsllmner-evaluator.py -c input/evaluation_config.json -r examples/select_
 ```
 ### TSV-converted bsllmner-mk2 result
 ```tsv
-SAMD00004141	CVCL_0030
-SAMD00008684	CVCL_0019
-SAMD00009960	CVCL_0597
+SAMD00004141	HeLa	CVCL_0030
+SAMD00008684	SH-SY5Y	CVCL_0019
+SAMD00009960	Ramos	CVCL_0597
 ```
-Pairs of BioSample IDs and mapped ontology term IDs
+Triples of BioSample IDs, extracted values, and mapped ontology term IDs.
 ### Output
 ```tsv
-SAMD00004141	CVCL_0030	HeLa	true	0.872	0.914
-SAMD00008684	CVCL_0019	SH-SY5Y	false	0.468	0.731	wrong_entity
-SAMD00009960	CVCL_0597	Ramos	true	0.699	0.842
+SAMD00004141	HeLa	CVCL_0030	HeLa	true	0.872	0.914
+SAMD00008684	SH-SY5Y	CVCL_0019	SH-SY5Y	false	0.468	0.731	selection_failed_to_reject
+SAMD00009960	Ramos	CVCL_0597	Ramos	true	0.699	0.842
 ```
 - BioSample ID
+- Extracted value
 - Mapped ontology term ID
 - Mapped ontology term label
 - Decision of this program. Whether the mapping is correct or not.
