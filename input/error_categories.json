@@ -1,47 +1,47 @@
 [
   {
-    "id": "wrong_entity",
-    "description": "The selected ontology term represents a different entity from the one described in the BioSample metadata."
+    "id": "extraction_wrong_attribute",
+    "description": "The pipeline extracted a metadata value under the evaluated attribute, but the value is actually used in the BioSample record as another kind of attribute or experimental role. Prefer this category over selection categories when the upstream extraction is already wrong, even if selection also failed to reject the candidate. Examples include extracting a ChIP target, assay target, antibody target, transgene, or measured gene as knockout_gene, knockdown_gene, or overexpressed_gene; extracting a treatment reagent as disease; or extracting a disease mention as tissue."
   },
   {
-    "id": "wrong_attribute_type",
-    "description": "The selected entity is related to the sample, but it belongs to the wrong attribute type, such as disease versus tissue or cell line versus cell type."
+    "id": "extraction_non_sample_entity",
+    "description": "The extracted value is mentioned in the BioSample metadata, but it does not represent the sample itself or the evaluated sample attribute. Examples include assay names, sequencing methods, antibody names, culture media, project labels, comparison groups, or other contextual entities."
   },
   {
-    "id": "too_broad",
-    "description": "The selected ontology term is an overly general ancestor or category for the intended entity."
+    "id": "extraction_abbreviation_overresolved",
+    "description": "The extraction or interpretation over-resolved an abbreviation, acronym, or short symbol whose intended meaning is ambiguous or unsupported by the metadata."
   },
   {
-    "id": "too_narrow",
-    "description": "The selected ontology term is an overly specific subtype or instance that is not supported by the metadata."
+    "id": "extraction_partial_or_boundary_error",
+    "description": "The extraction used the wrong text boundary, such as taking only part of a composite expression or including extra words, causing the extracted value to mean something different from the BioSample metadata."
   },
   {
-    "id": "related_but_not_equivalent",
-    "description": "The selected term is biologically or experimentally related to the metadata but is not an equivalent annotation for the sample."
+    "id": "extraction_unsupported_inference",
+    "description": "The extracted value is not directly supported by the BioSample metadata and appears to have been inferred or hallucinated from weak context."
   },
   {
-    "id": "partial_match",
-    "description": "The selected term only covers part of a composite expression and loses important meaning from the original metadata."
+    "id": "selection_failed_to_reject",
+    "description": "The extraction is reasonable, but none of the available ontology candidates is appropriate or there is not enough evidence, and the selection step should have rejected all candidates instead of producing a final mapping."
   },
   {
-    "id": "ambiguous_input_overresolved",
-    "description": "The input text is ambiguous or too short, but the pipeline resolved it to a specific ontology term without enough evidence."
+    "id": "selection_label_similarity_over_context",
+    "description": "The extraction is reasonable, but the selection step chose a candidate mainly because of label, synonym, or abbreviation similarity while ignoring the broader BioSample context."
   },
   {
-    "id": "negation_or_control_misread",
-    "description": "The pipeline treated negated, control, untreated, wild-type, none, or not-applicable metadata as a positive entity annotation."
+    "id": "selection_partial_match_accepted",
+    "description": "The extraction preserved the intended phrase, but the selection step accepted an ontology term that corresponds to only part of that phrase and loses important meaning."
   },
   {
-    "id": "insufficient_evidence",
-    "description": "The BioSample metadata does not provide enough evidence to support the selected mapping."
-  },
-  {
-    "id": "ontology_gap_or_version_issue",
-    "description": "The error appears to be caused by a missing, obsolete, or version-mismatched ontology term, leading to a near but incorrect mapping."
+    "id": "selection_granularity_error",
+    "description": "The extraction is reasonable, but the selected ontology term is too broad, too narrow, or otherwise at an inappropriate level of specificity for the BioSample metadata."
   },
   {
     "id": "missing_mapping",
     "description": "The pipeline produced no final ontology mapping even though the BioSample metadata appears to contain a mappable entity for the evaluated attribute."
+  },
+  {
+    "id": "ontology_gap_or_version_issue",
+    "description": "The error appears to be caused primarily by a missing, obsolete, or version-mismatched ontology term rather than by extraction or selection behavior."
   },
   {
     "id": "other",
