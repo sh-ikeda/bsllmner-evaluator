@@ -5,7 +5,7 @@
   },
   {
     "id": "extraction_non_sample_entity",
-    "description": "The extracted value is mentioned in the BioSample metadata, but it does not represent the sample itself or the evaluated sample attribute. Examples include assay names, sequencing methods, antibody names, culture media, project labels, comparison groups, or other contextual entities."
+    "description": "The extracted value is mentioned in the BioSample metadata, but it does not represent the sample itself or the evaluated sample attribute. Examples include assay names, sequencing methods, antibody names, culture media, project labels, comparison groups, or other contextual entities. For cell_line, this includes cases where the metadata mentions a stem cell line or other source cell line before differentiation, but the actual sample is a differentiated cell derived from that cell line rather than the original cell line itself."
   },
   {
     "id": "extraction_abbreviation_overresolved",
@@ -42,6 +42,10 @@
   {
     "id": "ontology_gap_or_version_issue",
     "description": "The error appears to be caused primarily by a missing, obsolete, or version-mismatched ontology term rather than by extraction or selection behavior."
+  },
+  {
+    "id": "ambiguous_source_metadata",
+    "description": "The BioSample metadata itself is ambiguous, contradictory, or too underspecified for reliable interpretation, even for a human reviewer. Examples include different plausible cell line names appearing in different metadata fields, such as source_name and cell line, without enough context to tell which one represents the sample itself."
   },
   {
     "id": "evaluator_false_negative",

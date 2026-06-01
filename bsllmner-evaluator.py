@@ -148,6 +148,7 @@ Final mapped term:
 {term_for_prompt}
 
 Classify the main reason for the error using exactly one category ID from the list below.
+If multiple pipeline steps contributed to the error, choose the earliest step where the error was already present, using this priority: extraction errors before selection errors before evaluator errors. For example, if the extracted value is already inappropriate for the evaluated attribute, choose an extraction category even if the selection step also failed to reject the final candidate.
 
 {categories_text}
 
