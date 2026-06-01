@@ -125,7 +125,25 @@ def build_prompt(sample, term_str, config):
     prompt = prompt.replace("{sample}", json.dumps(sample, indent=4)).replace("{term}", term_str)
     return prompt
 
-def build_classification_prompt(sample, target, term_str, config_attr, error_categories):
+def build_extraction_prompt(sample, target, config_attr):
+    pipeline_context = build_pipeline_context(target.get("pipeline_record"), config_attr)
+    extracted_value = format_tsv_value(target["extracted_value"])
+
+    return f"""Here is metadata of a sample that was used for a biological experiment.
+
+{json.dumps(sample, indent=4)}
+
+The bsllmner-mk2 pipeline output for the evaluated attribute is:
+
+{json.dumps(pipeline_context, indent=4)}
+
+Evaluated attribute: {config_attr}
+Extracted value: {extracted_value}
+
+Is the extracted value appropriate as the value for the evaluated attribute in this BioSample metadata? Answer true only if the extracted value represents the sample itself or the intended sample attribute, not merely a related experimental context, source, target, treatment, or ambiguous field. Output only true or false in lowercase.
+"""
+
+def build_classification_prompt(sample, target, term_str, config_attr, error_categories, stage):
     categories_text = "\n".join(
         f"- {category['id']}: {category['description']}"
         for category in error_categories
@@ -147,8 +165,7 @@ The final mapping for attribute "{config_attr}" was judged incorrect by a previo
 Final mapped term:
 {term_for_prompt}
 
-Classify the main reason for the error using exactly one category ID from the list below.
-If multiple pipeline steps contributed to the error, choose the earliest step where the error was already present, using this priority: extraction errors before selection errors before evaluator errors. For example, if the extracted value is already inappropriate for the evaluated attribute, choose an extraction category even if the selection step also failed to reject the final candidate.
+Classify the main {stage} error using exactly one category ID from the list below.
 
 {categories_text}
 
@@ -183,8 +200,36 @@ def calc_normalized_bool_prob(decision, top_logprobs):
         return ""
     return bool_probs[decision] / total
 
-def classify_error(sample, target, term_str, config_attr, error_categories, url, headers):
-    prompt = build_classification_prompt(sample, target, term_str, config_attr, error_categories)
+def post_bool_prompt(prompt, url, headers):
+    payload = {
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "chat_template_kwargs": {
+            "enable_thinking": False
+        },
+        "response_format": {
+            "type": "json_object",
+            "schema": {
+                "type": "boolean"
+            }
+        },
+        "temperature": 0,
+        "logprobs": True
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    data = response.json()["choices"][0]
+    content = data["message"]["content"]  # true / false
+    first_token_logprobs = data["logprobs"]["content"][0]
+    emitted_token_prob = exp(first_token_logprobs["logprob"])
+    normalized_bool_prob = calc_normalized_bool_prob(content, first_token_logprobs["top_logprobs"])
+    return content, emitted_token_prob, normalized_bool_prob
+
+def classify_error(sample, target, term_str, config_attr, error_categories, stage, url, headers):
+    prompt = build_classification_prompt(sample, target, term_str, config_attr, error_categories, stage)
     payload = {
         "messages": [
             {
@@ -248,6 +293,12 @@ def format_tsv_value(value):
 
 def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, config, config_attr, error_categories):
     headers = {"Content-Type": "application/json"}
+    extraction_categories = error_categories["extraction"]
+    extraction_error_categories = [
+        category for category in extraction_categories
+        if category["id"] != "extraction_valid"
+    ]
+    selection_categories = error_categories["selection"]
 
     samples = load_json_file(biosample_json_file, "BioSample")
     for sample in samples:
@@ -264,48 +315,52 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                 prompt = build_prompt(sample, term_str, config)
                 term_label = target["term_label"] or get_label(ontology, local_term_id, config["base_uri"])
 
-            payload = {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "chat_template_kwargs": {
-                    "enable_thinking": False
-                },
-                "response_format": {
-                    "type": "json_object",
-                    "schema": {
-                        "type": "boolean"
-                    }
-                },
-                "temperature": 0,
-                "logprobs": True
-            }
-            response = requests.post(url, headers=headers, json=payload)
-            data = response.json()["choices"][0]
-            content = data["message"]["content"]  # true / false
-            first_token_logprobs = data["logprobs"]["content"][0]
-            emitted_token_prob = exp(first_token_logprobs["logprob"])
-            normalized_bool_prob = calc_normalized_bool_prob(content, first_token_logprobs["top_logprobs"])
+            content, emitted_token_prob, normalized_bool_prob = post_bool_prompt(prompt, url, headers)
             if normalized_bool_prob == "":
                 print(
                     f"Warning: Could not calculate normalized boolean probability for {bs_id}\t{term_id}\t{content}",
                     file=sys.stderr
                 )
-            error_category = ""
-            error_reason = ""
-            if content.strip().lower() == "false":
-                error_category, error_reason = classify_error(
-                    sample,
-                    target,
-                    term_str,
-                    config_attr,
-                    error_categories,
+            extraction_decision = ""
+            extraction_category = ""
+            extraction_reason = ""
+            selection_category = ""
+            selection_reason = ""
+            if term_id != "" and content.strip().lower() == "false":
+                extraction_prompt = build_extraction_prompt(sample, target, config_attr)
+                extraction_decision, _, extraction_normalized_bool_prob = post_bool_prompt(
+                    extraction_prompt,
                     url,
                     headers
                 )
+                if extraction_normalized_bool_prob == "":
+                    print(
+                        f"Warning: Could not calculate normalized extraction probability for {bs_id}\t{term_id}\t{extraction_decision}",
+                        file=sys.stderr
+                    )
+                if extraction_decision.strip().lower() == "true":
+                    extraction_category = "extraction_valid"
+                    selection_category, selection_reason = classify_error(
+                        sample,
+                        target,
+                        term_str,
+                        config_attr,
+                        selection_categories,
+                        "selection",
+                        url,
+                        headers
+                    )
+                else:
+                    extraction_category, extraction_reason = classify_error(
+                        sample,
+                        target,
+                        term_str,
+                        config_attr,
+                        extraction_error_categories,
+                        "extraction",
+                        url,
+                        headers
+                    )
             print(
                 bs_id,
                 format_tsv_value(target["extracted_value"]),
@@ -314,8 +369,11 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                 content,
                 format_prob(emitted_token_prob),
                 format_prob(normalized_bool_prob),
-                error_category,
-                format_tsv_value(error_reason),
+                extraction_decision,
+                extraction_category,
+                format_tsv_value(extraction_reason),
+                selection_category,
+                format_tsv_value(selection_reason),
                 sep="\t"
             )
 
@@ -326,11 +384,17 @@ def load_config(config_file):
 
 def load_error_categories(error_category_file):
     categories = load_json_file(error_category_file, "error category")
-    if not categories:
-        raise UserInputError("Error category file must contain at least one category")
-    for category in categories:
-        if "id" not in category or "description" not in category:
-            raise UserInputError("Each error category must contain id and description")
+    if not isinstance(categories, dict):
+        raise UserInputError("Error category file must contain extraction and selection category lists")
+    for stage in ["extraction", "selection"]:
+        if stage not in categories or not categories[stage]:
+            raise UserInputError(f"Error category file must contain at least one {stage} category")
+        for category in categories[stage]:
+            if "id" not in category or "description" not in category:
+                raise UserInputError(f"Each {stage} error category must contain id and description")
+    extraction_ids = {category["id"] for category in categories["extraction"]}
+    if "extraction_valid" not in extraction_ids:
+        raise UserInputError("Extraction categories must contain extraction_valid")
     return categories
 
 def main():
