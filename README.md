@@ -50,7 +50,7 @@ Triples of BioSample IDs, extracted values, and mapped ontology term IDs.
 ### Output
 ```tsv
 SAMD00004141	HeLa	CVCL_0030	HeLa	true	0.872	0.914
-SAMD00008684	SH-SY5Y	CVCL_0019	SH-SY5Y	false	0.468	0.731	selection_failed_to_reject
+SAMD00008684	SH-SY5Y	CVCL_0019	SH-SY5Y	false	0.468	0.731	selection_failed_to_reject	The candidates did not contain a term well supported by the sample metadata.
 SAMD00009960	Ramos	CVCL_0597	Ramos	true	0.699	0.842
 ```
 - BioSample ID
@@ -61,3 +61,4 @@ SAMD00009960	Ramos	CVCL_0597	Ramos	true	0.699	0.842
 - Probability of the emitted first token.
 - Normalized probability within exactly matching `true` and `false` candidates, when available.
 - Error category ID. This is emitted only when the decision is `false`.
+- Error category reason. This is emitted only when the decision is `false`.

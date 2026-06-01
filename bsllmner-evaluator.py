@@ -152,7 +152,9 @@ If multiple pipeline steps contributed to the error, choose the earliest step wh
 
 {categories_text}
 
-Output only one category ID. Valid category IDs are: {category_ids}
+Output only a JSON object with these keys:
+- "category": one category ID. Valid category IDs are: {category_ids}
+- "reason": one short sentence explaining the judgment.
 """
 
 def build_pipeline_context(pipeline_record, config_attr):
@@ -197,18 +199,40 @@ def classify_error(sample, target, term_str, config_attr, error_categories, url,
     }
     response = requests.post(url, headers=headers, json=payload)
     content = response.json()["choices"][0]["message"]["content"].strip()
+    return parse_classification_response(content, error_categories)
+
+def parse_classification_response(content, error_categories):
     valid_ids = [category["id"] for category in error_categories]
+
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError:
+        parsed = None
+
+    if isinstance(parsed, dict):
+        category = str(parsed.get("category", "")).strip()
+        reason = str(parsed.get("reason", "")).strip()
+        if category in valid_ids:
+            return category, reason
+        for category_id in valid_ids:
+            if category_id in category:
+                print(
+                    f"Warning: Classification category was not exact; extracted '{category_id}' from '{category}'",
+                    file=sys.stderr
+                )
+                return category_id, reason
+
     if content in valid_ids:
-        return content
+        return content, ""
     for category_id in valid_ids:
         if category_id in content:
             print(
                 f"Warning: Classification response was not exact; extracted '{category_id}' from '{content}'",
                 file=sys.stderr
             )
-            return category_id
+            return category_id, content
     print(f"Warning: Could not parse classification response: {content}", file=sys.stderr)
-    return "other"
+    return "other", content
 
 def format_prob(prob):
     if prob == "":
@@ -220,7 +244,7 @@ def format_tsv_value(value):
         return ""
     if isinstance(value, (list, dict)):
         return json.dumps(value, ensure_ascii=False)
-    return str(value)
+    return str(value).replace("\t", " ").replace("\n", " ").replace("\r", " ")
 
 def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, config, config_attr, error_categories):
     headers = {"Content-Type": "application/json"}
@@ -271,8 +295,9 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                     file=sys.stderr
                 )
             error_category = ""
+            error_reason = ""
             if content.strip().lower() == "false":
-                error_category = classify_error(
+                error_category, error_reason = classify_error(
                     sample,
                     target,
                     term_str,
@@ -290,6 +315,7 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                 format_prob(emitted_token_prob),
                 format_prob(normalized_bool_prob),
                 error_category,
+                format_tsv_value(error_reason),
                 sep="\t"
             )
 
