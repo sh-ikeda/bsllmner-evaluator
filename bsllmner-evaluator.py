@@ -13,6 +13,7 @@ class UserInputError(Exception):
 
 
 def load_json_file(json_file, description):
+    # Attach the file role and path to JSON parse errors so CLI failures are actionable.
     try:
         with open(json_file, "r") as f:
             return json.load(f)
@@ -21,6 +22,7 @@ def load_json_file(json_file, description):
 
 
 def dump_owl_term(ontology, term_id, base_uri, props_for_dump):
+    # Keep ontology evidence compact; this string is inserted into the mapping prompt.
     dump_str = ""
     ns = ontology.get_namespace(base_uri)
     term = ns[term_id]
@@ -44,6 +46,7 @@ def ontology_local_id(term_id):
     return term_id.replace(":", "_", 1)
 
 def load_target_tsv(tsv_file):
+    # TSV targets are already flattened: accession, extracted value, final mapped term ID.
     mapping_result_dict = {}
     with open(tsv_file, "r") as f:
         for line_number, line in enumerate(f, start=1):
@@ -67,6 +70,7 @@ def load_target_tsv(tsv_file):
     return mapping_result_dict
 
 def load_target_json(json_file, config_attr):
+    # bsllmner-mk2 JSON preserves intermediate pipeline state for later error analysis.
     records = load_json_file(json_file, "evaluation target")
 
     mapping_result_dict = {}
@@ -111,6 +115,7 @@ def detect_target_file_format(target_file):
     return "tsv"
 
 def load_targets(target_file, config_attr, target_format):
+    # Auto-detect JSON versus TSV so existing command lines keep working.
     if target_format == "auto":
         target_format = detect_target_file_format(target_file)
     if target_format == "json":
@@ -118,6 +123,7 @@ def load_targets(target_file, config_attr, target_format):
     return load_target_tsv(target_file)
 
 def build_prompt(sample, term_str, config):
+    # The first evaluator pass only judges the final mapping/non-mapping decision.
     if term_str == "":
         prompt = config["prompt_non_mapped"]
     else:
@@ -125,9 +131,27 @@ def build_prompt(sample, term_str, config):
     prompt = prompt.replace("{sample}", json.dumps(sample, indent=4)).replace("{term}", term_str)
     return prompt
 
-def build_extraction_prompt(sample, target, config_attr):
+def build_classification_prompt(sample, target, term_str, config_attr, error_categories, stage):
+    # Classification prompts return both a machine-readable category and a short audit note.
+    if stage == "extraction":
+        stage_instruction = (
+            'Choose "extraction_valid" when the extracted value is appropriate for the evaluated '
+            "attribute; otherwise choose the extraction error category that best explains why the "
+            "extracted value itself is inappropriate."
+        )
+    else:
+        stage_instruction = (
+            "The extracted value has already been judged appropriate, so classify the downstream "
+            "selection error in the final ontology mapping."
+        )
+    categories_text = "\n".join(
+        f"- {category['id']}: {category['description']}"
+        for category in error_categories
+    )
+    category_ids = ", ".join(category["id"] for category in error_categories)
     pipeline_context = build_pipeline_context(target.get("pipeline_record"), config_attr)
     extracted_value = format_tsv_value(target["extracted_value"])
+    term_for_prompt = term_str if term_str else "(no final ontology term was mapped)"
 
     return f"""Here is metadata of a sample that was used for a biological experiment.
 
@@ -140,32 +164,13 @@ The bsllmner-mk2 pipeline output for the evaluated attribute is:
 Evaluated attribute: {config_attr}
 Extracted value: {extracted_value}
 
-Is the extracted value appropriate as the value for the evaluated attribute in this BioSample metadata? Answer true only if the extracted value represents the sample itself or the intended sample attribute, not merely a related experimental context, source, target, treatment, or ambiguous field. Output only true or false in lowercase.
-"""
-
-def build_classification_prompt(sample, target, term_str, config_attr, error_categories, stage):
-    categories_text = "\n".join(
-        f"- {category['id']}: {category['description']}"
-        for category in error_categories
-    )
-    category_ids = ", ".join(category["id"] for category in error_categories)
-    pipeline_context = build_pipeline_context(target.get("pipeline_record"), config_attr)
-    term_for_prompt = term_str if term_str else "(no final ontology term was mapped)"
-
-    return f"""Here is metadata of a sample that was used for a biological experiment.
-
-{json.dumps(sample, indent=4)}
-
-The bsllmner-mk2 pipeline output for the evaluated attribute is:
-
-{json.dumps(pipeline_context, indent=4)}
-
 The final mapping for attribute "{config_attr}" was judged incorrect by a previous evaluator.
 
 Final mapped term:
 {term_for_prompt}
 
 Classify the main {stage} error using exactly one category ID from the list below.
+{stage_instruction}
 
 {categories_text}
 
@@ -175,6 +180,7 @@ Output only a JSON object with these keys:
 """
 
 def build_pipeline_context(pipeline_record, config_attr):
+    # Classification only needs the evaluated attribute slice of the upstream pipeline output.
     if pipeline_record is None:
         return None
 
@@ -188,6 +194,7 @@ def build_pipeline_context(pipeline_record, config_attr):
     }
 
 def calc_normalized_bool_prob(decision, top_logprobs):
+    # Only exact true/false tokens are included, matching the repository's confidence definition.
     bool_probs = {"true": 0.0, "false": 0.0}
     for item in top_logprobs:
         token = item["token"]
@@ -201,6 +208,7 @@ def calc_normalized_bool_prob(decision, top_logprobs):
     return bool_probs[decision] / total
 
 def post_bool_prompt(prompt, url, headers):
+    # Boolean prompts use the observed llama.cpp response_format/logprobs settings.
     payload = {
         "messages": [
             {
@@ -229,6 +237,7 @@ def post_bool_prompt(prompt, url, headers):
     return content, emitted_token_prob, normalized_bool_prob
 
 def classify_error(sample, target, term_str, config_attr, error_categories, stage, url, headers):
+    # The same parser is used for extraction and selection category JSON responses.
     prompt = build_classification_prompt(sample, target, term_str, config_attr, error_categories, stage)
     payload = {
         "messages": [
@@ -247,6 +256,7 @@ def classify_error(sample, target, term_str, config_attr, error_categories, stag
     return parse_classification_response(content, error_categories)
 
 def parse_classification_response(content, error_categories):
+    # Prefer strict JSON but keep a tolerant fallback for occasional model formatting drift.
     valid_ids = [category["id"] for category in error_categories]
 
     try:
@@ -285,6 +295,7 @@ def format_prob(prob):
     return round(prob, 3)
 
 def format_tsv_value(value):
+    # Keep the evaluator output one physical TSV row per evaluated mapping.
     if value is None:
         return ""
     if isinstance(value, (list, dict)):
@@ -294,10 +305,6 @@ def format_tsv_value(value):
 def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, config, config_attr, error_categories):
     headers = {"Content-Type": "application/json"}
     extraction_categories = error_categories["extraction"]
-    extraction_error_categories = [
-        category for category in extraction_categories
-        if category["id"] != "extraction_valid"
-    ]
     selection_categories = error_categories["selection"]
 
     samples = load_json_file(biosample_json_file, "BioSample")
@@ -306,40 +313,41 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
         for target in mapping_result_dict[bs_id]:
             term_id = target["term_id"]
             if term_id == "":
+                # Non-mapped cases stop after the configured non-mapping true/false prompt.
                 prompt = build_prompt(sample, "", config)
                 term_label = ""
                 term_str = ""
             else:
+                # Mapped cases include ontology evidence in the first-pass mapping prompt.
                 local_term_id = ontology_local_id(term_id)
                 term_str = dump_owl_term(ontology, local_term_id, config["base_uri"], config["props_for_dump"])
                 prompt = build_prompt(sample, term_str, config)
                 term_label = target["term_label"] or get_label(ontology, local_term_id, config["base_uri"])
 
+            # First pass: judge whether the final mapping or non-mapping decision is correct.
             content, emitted_token_prob, normalized_bool_prob = post_bool_prompt(prompt, url, headers)
             if normalized_bool_prob == "":
                 print(
                     f"Warning: Could not calculate normalized boolean probability for {bs_id}\t{term_id}\t{content}",
                     file=sys.stderr
                 )
-            extraction_decision = ""
             extraction_category = ""
             extraction_reason = ""
             selection_category = ""
             selection_reason = ""
             if term_id != "" and content.strip().lower() == "false":
-                extraction_prompt = build_extraction_prompt(sample, target, config_attr)
-                extraction_decision, _, extraction_normalized_bool_prob = post_bool_prompt(
-                    extraction_prompt,
+                # Second pass: classify extraction first. Only valid extraction proceeds to selection classification.
+                extraction_category, extraction_reason = classify_error(
+                    sample,
+                    target,
+                    term_str,
+                    config_attr,
+                    extraction_categories,
+                    "extraction",
                     url,
                     headers
                 )
-                if extraction_normalized_bool_prob == "":
-                    print(
-                        f"Warning: Could not calculate normalized extraction probability for {bs_id}\t{term_id}\t{extraction_decision}",
-                        file=sys.stderr
-                    )
-                if extraction_decision.strip().lower() == "true":
-                    extraction_category = "extraction_valid"
+                if extraction_category == "extraction_valid":
                     selection_category, selection_reason = classify_error(
                         sample,
                         target,
@@ -347,17 +355,6 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                         config_attr,
                         selection_categories,
                         "selection",
-                        url,
-                        headers
-                    )
-                else:
-                    extraction_category, extraction_reason = classify_error(
-                        sample,
-                        target,
-                        term_str,
-                        config_attr,
-                        extraction_error_categories,
-                        "extraction",
                         url,
                         headers
                     )
@@ -369,7 +366,6 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                 content,
                 format_prob(emitted_token_prob),
                 format_prob(normalized_bool_prob),
-                extraction_decision,
                 extraction_category,
                 format_tsv_value(extraction_reason),
                 selection_category,
@@ -383,6 +379,7 @@ def load_config(config_file):
     return load_json_file(config_file, "evaluation config")
 
 def load_error_categories(error_category_file):
+    # One JSON file holds separate category lists for the two classification passes.
     categories = load_json_file(error_category_file, "error category")
     if not isinstance(categories, dict):
         raise UserInputError("Error category file must contain extraction and selection category lists")

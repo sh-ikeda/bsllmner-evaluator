@@ -2,7 +2,7 @@
   "extraction": [
     {
       "id": "extraction_valid",
-      "description": "The extracted value is appropriate for the evaluated attribute. This category is assigned by the evaluator when the extraction validity check returns true."
+      "description": "The extracted value is appropriate for the evaluated attribute and the extraction step does not appear to be the cause of the incorrect final mapping."
     },
     {
       "id": "extraction_wrong_attribute",
