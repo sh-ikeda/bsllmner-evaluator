@@ -133,17 +133,6 @@ def build_prompt(sample, term_str, config):
 
 def build_classification_prompt(sample, target, term_str, config_attr, error_categories, stage):
     # Classification prompts return both a machine-readable category and a short audit note.
-    if stage == "extraction":
-        stage_instruction = (
-            'Choose "extraction_valid" when the extracted value is appropriate for the evaluated '
-            "attribute; otherwise choose the extraction error category that best explains why the "
-            "extracted value itself is inappropriate."
-        )
-    else:
-        stage_instruction = (
-            "The extracted value has already been judged appropriate, so classify the downstream "
-            "selection error in the final ontology mapping."
-        )
     categories_text = "\n".join(
         f"- {category['id']}: {category['description']}"
         for category in error_categories
@@ -153,26 +142,35 @@ def build_classification_prompt(sample, target, term_str, config_attr, error_cat
     extracted_value = format_tsv_value(target["extracted_value"])
     term_for_prompt = term_str if term_str else "(no final ontology term was mapped)"
 
+    if stage == "extraction":
+        stage_instruction = f"""\
+An automatic metadata standarization pipeline using an LLM was instructed to extract \
+the string(s) representing the sample.
+As the "{config_attr}" attribute, the pipeline extracted "{extracted_value}".
+
+Classify the validity of this extraction into exactly one category ID from the list below.
+
+{categories_text}
+
+Choose "extraction_valid" when the extracted value is appropriate for the evaluated \
+attribute; otherwise choose the extraction error category that best explains why the \
+extracted value itself is inappropriate."""
+    else:
+        stage_instruction = f"""\
+An automatic metadata standarization pipeline using an LLM was instructed to map the \
+metadata to the relevant ontology term representing the sample.
+As the "{config_attr}" attribute, the pipeline mapped the ontology term below:
+
+{term_for_prompt}
+Classify the validity of this mapping into exactly one category ID from the list below.
+
+{categories_text}"""
+
     return f"""Here is metadata of a sample that was used for a biological experiment.
 
 {json.dumps(sample, indent=4)}
 
-The bsllmner-mk2 pipeline output for the evaluated attribute is:
-
-{json.dumps(pipeline_context, indent=4)}
-
-Evaluated attribute: {config_attr}
-Extracted value: {extracted_value}
-
-The final mapping for attribute "{config_attr}" was judged incorrect by a previous evaluator.
-
-Final mapped term:
-{term_for_prompt}
-
-Classify the main {stage} error using exactly one category ID from the list below.
 {stage_instruction}
-
-{categories_text}
 
 Output only a JSON object with these keys:
 - "category": one category ID. Valid category IDs are: {category_ids}

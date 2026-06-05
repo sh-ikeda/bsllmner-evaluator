@@ -1,10 +1,6 @@
 {
   "extraction": [
     {
-      "id": "extraction_valid",
-      "description": "The extracted value is appropriate for the evaluated attribute and the extraction step does not appear to be the cause of the incorrect final mapping."
-    },
-    {
       "id": "extraction_wrong_attribute",
       "description": "The pipeline extracted a metadata value under the evaluated attribute, but the value is actually used in the BioSample record as another kind of attribute or experimental role. Examples include extracting a ChIP target, assay target, antibody target, transgene, or measured gene as knockout_gene, knockdown_gene, or overexpressed_gene; extracting a treatment reagent as disease; extracting a disease mention as cell_type or tissue; or extracting a tissue name as disease."
     },
@@ -27,6 +23,10 @@
     {
       "id": "ambiguous_source_metadata",
       "description": "The BioSample metadata itself is ambiguous, contradictory, or too underspecified for reliable interpretation, even for a human reviewer. Examples include different plausible cell line names appearing in different metadata fields, such as source_name and cell line, without enough context to tell which one represents the sample itself."
+    },
+    {
+      "id": "extraction_valid",
+      "description": "The extracted value is appropriate for the evaluated attribute."
     },
     {
       "id": "other",
