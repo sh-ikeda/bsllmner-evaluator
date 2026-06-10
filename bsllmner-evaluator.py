@@ -154,7 +154,11 @@ Classify the validity of this extraction into exactly one category ID from the l
 
 Choose "extraction_valid" when the extracted value is appropriate for the evaluated \
 attribute; otherwise choose the extraction error category that best explains why the \
-extracted value itself is inappropriate."""
+extracted value itself is inappropriate.
+Since the input metadata is manually written by submitters, it may not be well-formatted. \
+Extraction should not be considered valid simply because the extracted value derives from \
+the attribute in the input data that matches or is similar to "{config_attr}"."""
+
     else:
         stage_instruction = f"""\
 An automatic metadata standarization pipeline using an LLM was instructed to map the \
