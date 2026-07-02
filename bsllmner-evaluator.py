@@ -131,14 +131,9 @@ def build_prompt(sample, term_str, config):
     prompt = prompt.replace("{sample}", json.dumps(sample, indent=4)).replace("{term}", term_str)
     return prompt
 
-def build_classification_prompt(sample, target, term_str, config_attr, error_categories, stage):
-    # Classification prompts return both a machine-readable category and a short audit note.
-    categories_text = "\n".join(
-        f"- {category['id']}: {category['description']}"
-        for category in error_categories
-    )
-    category_ids = ", ".join(category["id"] for category in error_categories)
-    pipeline_context = build_pipeline_context(target.get("pipeline_record"), config_attr)
+def build_category_prompt(sample, target, term_str, config_attr, category, stage):
+    # One yes/no question per category, instead of an N-way choice, so each
+    # judgment stays a simple, independently checkable question.
     extracted_value = format_tsv_value(target["extracted_value"])
     term_for_prompt = term_str if term_str else "(no final ontology term was mapped)"
 
@@ -146,18 +141,7 @@ def build_classification_prompt(sample, target, term_str, config_attr, error_cat
         stage_instruction = f"""\
 An automatic metadata standarization pipeline using an LLM was instructed to extract \
 the string(s) representing the sample.
-As the "{config_attr}" attribute, the pipeline extracted "{extracted_value}".
-
-Classify the validity of this extraction into exactly one category ID from the list below.
-
-{categories_text}
-
-Choose "extraction_valid" when the extracted value is appropriate for the evaluated \
-attribute; otherwise choose the extraction error category that best explains why the \
-extracted value itself is inappropriate.
-Since the input metadata is manually written by submitters, it may not be well-formatted. \
-Extraction should not be considered valid simply because the extracted value derives from \
-the attribute in the input data that matches or is similar to "{config_attr}"."""
+As the "{config_attr}" attribute, the pipeline extracted "{extracted_value}"."""
 
     else:
         stage_instruction = f"""\
@@ -165,10 +149,7 @@ An automatic metadata standarization pipeline using an LLM was instructed to map
 metadata to the relevant ontology term representing the sample.
 As the "{config_attr}" attribute, the pipeline mapped the ontology term below:
 
-{term_for_prompt}
-Classify the validity of this mapping into exactly one category ID from the list below.
-
-{categories_text}"""
+{term_for_prompt}"""
 
     return f"""Here is metadata of a sample that was used for a biological experiment.
 
@@ -176,30 +157,38 @@ Classify the validity of this mapping into exactly one category ID from the list
 
 {stage_instruction}
 
-Output only a JSON object with these keys:
-- "category": one category ID. Valid category IDs are: {category_ids}
-- "reason": one short sentence explaining the judgment.
+Consider whether the following statement correctly describes this {stage}:
+
+"{category['description']}"
+
+Does this statement apply? Output only a JSON object with these keys:
+- "decision": true or false.
+- "reason": one concise sentence explaining the judgment. Keep it short.
 """
-
-def build_pipeline_context(pipeline_record, config_attr):
-    # Classification only needs the evaluated attribute slice of the upstream pipeline output.
-    if pipeline_record is None:
-        return None
-
-    extracted = pipeline_record.get("extract", {}).get("extracted")
-    return {
-        "accession": pipeline_record.get("extract", {}).get("accession"),
-        "extracted_for_attribute": extracted.get(config_attr) if isinstance(extracted, dict) else extracted,
-        "search_results_for_attribute": pipeline_record.get("search_results", {}).get(config_attr, {}),
-        "text2term_results_for_attribute": pipeline_record.get("text2term_results", {}).get(config_attr, {}),
-        "final_results_for_attribute": pipeline_record.get("results", {}).get(config_attr, [])
-    }
 
 def calc_normalized_bool_prob(decision, top_logprobs):
     # Only exact true/false tokens are included, matching the repository's confidence definition.
     bool_probs = {"true": 0.0, "false": 0.0}
     for item in top_logprobs:
         token = item["token"]
+        if token in bool_probs:
+            bool_probs[token] += exp(item["logprob"])
+
+    decision = decision.strip().lower()
+    total = bool_probs["true"] + bool_probs["false"]
+    if decision not in bool_probs or total == 0:
+        return ""
+    return bool_probs[decision] / total
+
+def calc_normalized_bool_prob_loose(decision, top_logprobs):
+    # Same as calc_normalized_bool_prob, but tolerant of a leading space on
+    # the true/false token. Inside a {"decision": ..., "reason": ...} object
+    # the value token is naturally emitted as " true"/" false" (JSON "key":
+    # value syntax), unlike the top-level boolean case where content has no
+    # such prefix and the strict exact-match rule applies.
+    bool_probs = {"true": 0.0, "false": 0.0}
+    for item in top_logprobs:
+        token = item["token"].strip()
         if token in bool_probs:
             bool_probs[token] += exp(item["logprob"])
 
@@ -238,9 +227,22 @@ def post_bool_prompt(prompt, url, headers):
     normalized_bool_prob = calc_normalized_bool_prob(content, first_token_logprobs["top_logprobs"])
     return content, emitted_token_prob, normalized_bool_prob
 
-def classify_error(sample, target, term_str, config_attr, error_categories, stage, url, headers):
-    # The same parser is used for extraction and selection category JSON responses.
-    prompt = build_classification_prompt(sample, target, term_str, config_attr, error_categories, stage)
+def find_bool_token_logprobs(content_logprobs):
+    # The decision is no longer necessarily the first content token (it now
+    # sits inside a {"decision": ..., "reason": ...} object), so scan for it.
+    # The token itself carries a leading space here (JSON "key": value
+    # syntax), e.g. " false", hence the stripped comparison.
+    for item in content_logprobs:
+        if item["token"].strip() in ("true", "false"):
+            return item
+    return None
+
+def post_category_prompt(prompt, url, headers):
+    # Category questions ask for a compact {"decision": bool, "reason": "..."}
+    # object in a single non-thinking pass. An earlier version enabled
+    # llama.cpp "thinking" to get a separate reasoning trace, but that made
+    # each category call take ~45-50s (up to 12+ minutes for a single row
+    # with 15 categories) -- too slow in practice, so thinking is off again.
     payload = {
         "messages": [
             {
@@ -251,45 +253,55 @@ def classify_error(sample, target, term_str, config_attr, error_categories, stag
         "chat_template_kwargs": {
             "enable_thinking": False
         },
-        "temperature": 0
+        "response_format": {
+            "type": "json_object",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "decision": {"type": "boolean"},
+                    "reason": {"type": "string"}
+                },
+                "required": ["decision", "reason"]
+            }
+        },
+        "temperature": 0,
+        "logprobs": True
     }
     response = requests.post(url, headers=headers, json=payload)
-    content = response.json()["choices"][0]["message"]["content"].strip()
-    return parse_classification_response(content, error_categories)
+    data = response.json()["choices"][0]
+    content = data["message"]["content"]
+    parsed = json.loads(content)
+    decision = "true" if parsed["decision"] else "false"
+    reason = str(parsed["reason"]).strip()
 
-def parse_classification_response(content, error_categories):
-    # Prefer strict JSON but keep a tolerant fallback for occasional model formatting drift.
-    valid_ids = [category["id"] for category in error_categories]
+    bool_token_logprobs = find_bool_token_logprobs(data["logprobs"]["content"])
+    if bool_token_logprobs is None:
+        emitted_token_prob = ""
+        normalized_bool_prob = ""
+    else:
+        emitted_token_prob = exp(bool_token_logprobs["logprob"])
+        normalized_bool_prob = calc_normalized_bool_prob_loose(
+            decision, bool_token_logprobs["top_logprobs"]
+        )
+    return decision, emitted_token_prob, normalized_bool_prob, reason
 
-    try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
-        parsed = None
-
-    if isinstance(parsed, dict):
-        category = str(parsed.get("category", "")).strip()
-        reason = str(parsed.get("reason", "")).strip()
-        if category in valid_ids:
-            return category, reason
-        for category_id in valid_ids:
-            if category_id in category:
-                print(
-                    f"Warning: Classification category was not exact; extracted '{category_id}' from '{category}'",
-                    file=sys.stderr
-                )
-                return category_id, reason
-
-    if content in valid_ids:
-        return content, ""
-    for category_id in valid_ids:
-        if category_id in content:
-            print(
-                f"Warning: Classification response was not exact; extracted '{category_id}' from '{content}'",
-                file=sys.stderr
-            )
-            return category_id, content
-    print(f"Warning: Could not parse classification response: {content}", file=sys.stderr)
-    return "other", content
+def classify_by_category(sample, target, term_str, config_attr, categories, stage, url, headers, verbose=False):
+    # Ask every category as an independent yes/no question rather than
+    # forcing a single N-way choice; all judgments are kept, none discarded.
+    judgments = []
+    for category in categories:
+        prompt = build_category_prompt(sample, target, term_str, config_attr, category, stage)
+        decision, emitted_prob, normalized_prob, reason = post_category_prompt(prompt, url, headers)
+        if verbose:
+            print(f"    [{stage}] {category['id']}: {decision}", file=sys.stderr)
+        judgments.append({
+            "category": category["id"],
+            "decision": decision,
+            "probability": format_prob(emitted_prob),
+            "normalized_probability": format_prob(normalized_prob),
+            "reason": reason
+        })
+    return judgments
 
 def format_prob(prob):
     if prob == "":
@@ -304,16 +316,65 @@ def format_tsv_value(value):
         return json.dumps(value, ensure_ascii=False)
     return str(value).replace("\t", " ").replace("\n", " ").replace("\r", " ")
 
-def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, config, config_attr, error_categories):
+def build_header(error_categories):
+    # One decision/probability/normalized_probability/reason column group per
+    # category, so every judgment is its own TSV column instead of a JSON blob.
+    header = [
+        "accession",
+        "extracted_value",
+        "term_id",
+        "term_label",
+        "mapping_decision",
+        "mapping_probability",
+        "mapping_normalized_probability"
+    ]
+    # Category IDs already convey their stage (e.g. "extraction_wrong_attribute",
+    # "selection_failed_to_reject"), and no ID collides across stages, so the
+    # column name is just the ID itself rather than a redundant stage prefix.
+    for categories in (error_categories["extraction"], error_categories["selection"]):
+        for category in categories:
+            header += [
+                f"{category['id']}_decision",
+                f"{category['id']}_probability",
+                f"{category['id']}_normalized_probability",
+                f"{category['id']}_reason"
+            ]
+    return header
+
+def flatten_judgments(categories, judgments):
+    # Empty strings mean the category was never asked (e.g. mapping decision was true).
+    judgment_by_category = {j["category"]: j for j in judgments}
+    values = []
+    for category in categories:
+        judgment = judgment_by_category.get(category["id"])
+        if judgment is None:
+            values += ["", "", "", ""]
+        else:
+            values += [
+                judgment["decision"],
+                judgment["probability"],
+                judgment["normalized_probability"],
+                format_tsv_value(judgment["reason"])
+            ]
+    return values
+
+def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, config, config_attr, error_categories, verbose=False):
     headers = {"Content-Type": "application/json"}
     extraction_categories = error_categories["extraction"]
     selection_categories = error_categories["selection"]
+    total_targets = sum(len(targets) for targets in mapping_result_dict.values())
+    row_number = 0
+
+    print(*build_header(error_categories), sep="\t")
 
     samples = load_json_file(biosample_json_file, "BioSample")
     for sample in samples:
         bs_id = sample["accession"]
         for target in mapping_result_dict[bs_id]:
+            row_number += 1
             term_id = target["term_id"]
+            if verbose:
+                print(f"[{row_number}/{total_targets}] {bs_id}\t{term_id}", file=sys.stderr)
             if term_id == "":
                 # Non-mapped cases stop after the configured non-mapping true/false prompt.
                 prompt = build_prompt(sample, "", config)
@@ -328,18 +389,20 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
 
             # First pass: judge whether the final mapping or non-mapping decision is correct.
             content, emitted_token_prob, normalized_bool_prob = post_bool_prompt(prompt, url, headers)
+            if verbose:
+                print(f"  mapping decision: {content.strip().lower()}", file=sys.stderr)
             if normalized_bool_prob == "":
                 print(
                     f"Warning: Could not calculate normalized boolean probability for {bs_id}\t{term_id}\t{content}",
                     file=sys.stderr
                 )
-            extraction_category = ""
-            extraction_reason = ""
-            selection_category = ""
-            selection_reason = ""
+            extraction_judgments = []
+            selection_judgments = []
             if term_id != "" and content.strip().lower() == "false":
-                # Second pass: classify extraction first. Only valid extraction proceeds to selection classification.
-                extraction_category, extraction_reason = classify_error(
+                # Second pass: ask every extraction and selection category as an
+                # independent yes/no question. Both stages always run together;
+                # extraction_valid is just one more reported judgment, not a gate.
+                extraction_judgments = classify_by_category(
                     sample,
                     target,
                     term_str,
@@ -347,33 +410,32 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                     extraction_categories,
                     "extraction",
                     url,
-                    headers
+                    headers,
+                    verbose
                 )
-                if extraction_category == "extraction_valid":
-                    selection_category, selection_reason = classify_error(
-                        sample,
-                        target,
-                        term_str,
-                        config_attr,
-                        selection_categories,
-                        "selection",
-                        url,
-                        headers
-                    )
-            print(
+                selection_judgments = classify_by_category(
+                    sample,
+                    target,
+                    term_str,
+                    config_attr,
+                    selection_categories,
+                    "selection",
+                    url,
+                    headers,
+                    verbose
+                )
+            row = [
                 bs_id,
                 format_tsv_value(target["extracted_value"]),
                 term_id,
                 term_label,
                 content,
                 format_prob(emitted_token_prob),
-                format_prob(normalized_bool_prob),
-                extraction_category,
-                format_tsv_value(extraction_reason),
-                selection_category,
-                format_tsv_value(selection_reason),
-                sep="\t"
-            )
+                format_prob(normalized_bool_prob)
+            ]
+            row += flatten_judgments(extraction_categories, extraction_judgments)
+            row += flatten_judgments(selection_categories, selection_judgments)
+            print(*row, sep="\t")
 
     return
 
@@ -405,6 +467,7 @@ def main():
     parser.add_argument("--error_category_file", default="input/error_categories.json", help='Path to JSON file defining error categories')
     parser.add_argument("-a", '--config_attr', help='Attribute name, defined in config file, to be used for this run ', required=True)
     parser.add_argument("-u", '--url', help='URL of llama.cpp endpoint', required=True)
+    parser.add_argument("-v", '--verbose', action="store_true", help='Print per-row and per-category progress to stderr')
 
     args = parser.parse_args()
     try:
@@ -442,7 +505,8 @@ def main():
             args.url,
             config,
             args.config_attr,
-            error_categories
+            error_categories,
+            args.verbose
         )
         total_time = time.time() - start_time
         print(f"Evaluation completed in {total_time:.2f} seconds", file=sys.stderr)

@@ -27,10 +27,6 @@
     {
       "id": "extraction_valid",
       "description": "The extracted value is appropriate for the evaluated attribute."
-    },
-    {
-      "id": "other",
-      "description": "The extraction error does not fit the other categories."
     }
   ],
   "selection": [
@@ -57,10 +53,6 @@
     {
       "id": "evaluator_false_negative",
       "description": "The previous evaluator judgment is itself wrong: the final ontology mapping is actually appropriate for the BioSample metadata, even though it was judged false."
-    },
-    {
-      "id": "other",
-      "description": "The selection error does not fit the other categories."
     }
   ]
 }

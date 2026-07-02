@@ -48,19 +48,22 @@ SAMD00009960	Ramos	CVCL_0597
 ```
 Triples of BioSample IDs, extracted values, and mapped ontology term IDs.
 ### Output
+A TSV with a header row. The first 7 columns are fixed:
+
+1. `accession`
+2. `extracted_value`
+3. `term_id`
+4. `term_label`
+5. `mapping_decision` — whether this program judged the mapping (or non-mapping) correct.
+6. `mapping_probability` — probability of the emitted first token.
+7. `mapping_normalized_probability` — normalized probability within exactly matching `true` and `false` candidates, when available.
+
+After that, there are 4 columns per error category defined in `input/error_categories.json` (first all `extraction` categories, then all `selection` categories, in the order they appear in that file): `{category_id}_decision`, `{category_id}_probability`, `{category_id}_normalized_probability`, `{category_id}_reason`.
+
+Each category is asked as an independent yes/no question ("does this category's description apply?"), so every category gets its own judgment — there is no single chosen category per stage. Both extraction and selection categories are asked whenever `mapping_decision` is `false` and `term_id` is not empty; all of their columns are empty otherwise (the categories were never asked). `probability`/`normalized_probability` follow the same definition as columns 6/7, computed for that category's `true`/`false` decision token; `reason` is one short sentence from the model.
+
 ```tsv
-SAMD00004141	HeLa	CVCL_0030	HeLa	true	0.872	0.914				
-SAMD00008684	SH-SY5Y	CVCL_0019	SH-SY5Y	false	0.468	0.731	extraction_valid		selection_failed_to_reject	The candidates did not contain a term well supported by the sample metadata.
-SAMD00009960	Ramos	CVCL_0597	Ramos	true	0.699	0.842				
+accession	extracted_value	term_id	term_label	mapping_decision	mapping_probability	mapping_normalized_probability	extraction_wrong_attribute_decision	extraction_wrong_attribute_probability	extraction_wrong_attribute_normalized_probability	extraction_wrong_attribute_reason	...	extraction_valid_decision	extraction_valid_probability	extraction_valid_normalized_probability	extraction_valid_reason	selection_failed_to_reject_decision	selection_failed_to_reject_probability	selection_failed_to_reject_normalized_probability	selection_failed_to_reject_reason	...
+SAMD00004141	HeLa	CVCL_0030	HeLa	true	0.872	0.914											
+SAMD00008684	SH-SY5Y	CVCL_0019	SH-SY5Y	false	0.468	0.731	false	0.81	0.81	The extracted value correctly matches the cell_line attribute.	...	true	0.93	0.97	The extracted value is appropriate for the evaluated attribute.	true	0.81	0.88	The candidates did not contain a term well supported by the sample metadata.	...
 ```
-- BioSample ID
-- Extracted value
-- Mapped ontology term ID
-- Mapped ontology term label
-- Decision of this program. Whether the mapping is correct or not.
-- Probability of the emitted first token.
-- Normalized probability within exactly matching `true` and `false` candidates, when available.
-- Extraction category ID. This is emitted only when the mapping decision is `false` and the mapped ontology term ID is not empty. `extraction_valid` means selection classification was performed.
-- Extraction category reason.
-- Selection category ID. This is emitted only when the extraction category is `extraction_valid`.
-- Selection category reason.
