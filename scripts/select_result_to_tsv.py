@@ -9,7 +9,8 @@ def main():
     args = parser.parse_args()
     attr = args.attr
     with open(args.select_result_file, "r") as f:
-        samples = json.load(f)
+        data = json.load(f)
+        samples = data["entries"] if isinstance(data, dict) else data
         for sample in samples:
             results = sample["results"]
             sample_id = sample["extract"]["accession"]
