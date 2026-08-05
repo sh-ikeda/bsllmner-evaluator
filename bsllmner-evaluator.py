@@ -74,12 +74,13 @@ def load_target_tsv(tsv_file):
     with open(tsv_file, "r") as f:
         for line_number, line in enumerate(f, start=1):
             sep_line = line.strip(' \n\r').split('\t')
-            if len(sep_line) != 3:
+            if len(sep_line) not in (3, 4):
                 raise UserInputError(
                     f"Malformed evaluation target TSV '{tsv_file}' line {line_number}: "
-                    "expected 3 columns: BioSample accession, extracted value, mapped ontology term ID"
+                    "expected 3 columns: BioSample accession, extracted value, mapped ontology term ID "
+                    "(a 4th column with the term ID's human-readable label is also accepted, unused)"
                 )
-            accession, extracted_value, term_id = sep_line
+            accession, extracted_value, term_id = sep_line[:3]
             target = {
                 "term_id": term_id,
                 "term_label": "",

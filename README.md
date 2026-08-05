@@ -48,7 +48,7 @@ SAMD00004141	HeLa	CVCL_0030
 SAMD00008684	SH-SY5Y	CVCL_0019
 SAMD00009960	Ramos	CVCL_0597
 ```
-Triples of BioSample IDs, extracted values, and mapped ontology term IDs.
+Triples of BioSample IDs, extracted values, and mapped ontology term IDs. A 4th column with the term ID's human-readable label is also accepted but unused.
 ### Output
 A TSV with a header row. The first 7 columns are fixed:
 
