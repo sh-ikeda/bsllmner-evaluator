@@ -20,6 +20,7 @@ python bsllmner-evaluator.py -c input/evaluation_config.json -r examples/select_
 `-a`: The attribute to evaluate in this run, e.g. `cell_line` or `tissue`. The attribute must be defined in `evaluation_config.json`.
 `-b`: Path to the JSON file of the original BioSample datasets.
 `--error_category_file`: Path to the JSON file defining error categories. Default is `input/error_categories.json`.
+`--bool_only`: Only run the first-pass mapping correctness judgment (`mapping_decision` and its probabilities); skip the extraction/selection category classification pass entirely. The output TSV then has only the first 7 columns, and `--error_category_file` is not read.
 
 ## Format
 ### BioSample JSON
@@ -58,7 +59,7 @@ A TSV with a header row. The first 7 columns are fixed:
 6. `mapping_probability` — probability of the emitted first token.
 7. `mapping_normalized_probability` — normalized probability within exactly matching `true` and `false` candidates, when available.
 
-After that, there are 4 columns per error category defined in `input/error_categories.json` (first all `extraction` categories, then all `selection` categories, in the order they appear in that file): `{category_id}_decision`, `{category_id}_probability`, `{category_id}_normalized_probability`, `{category_id}_reason`.
+After that, there are 4 columns per error category defined in `input/error_categories.json` (first all `extraction` categories, then all `selection` categories, in the order they appear in that file): `{category_id}_decision`, `{category_id}_probability`, `{category_id}_normalized_probability`, `{category_id}_reason`. These columns are omitted entirely when `--bool_only` is given.
 
 Each category is asked as an independent yes/no question ("does this category's description apply?"), so every category gets its own judgment — there is no single chosen category per stage. Both extraction and selection categories are asked whenever `mapping_decision` is `false` and `term_id` is not empty; all of their columns are empty otherwise (the categories were never asked). `probability`/`normalized_probability` follow the same definition as columns 6/7, computed for that category's `true`/`false` decision token; `reason` is one short sentence from the model.
 

@@ -328,6 +328,9 @@ def build_header(error_categories):
         "mapping_probability",
         "mapping_normalized_probability"
     ]
+    if error_categories is None:
+        # bool_only mode: no classification pass, so no category columns.
+        return header
     # Category IDs already convey their stage (e.g. "extraction_wrong_attribute",
     # "selection_failed_to_reject"), and no ID collides across stages, so the
     # column name is just the ID itself rather than a redundant stage prefix.
@@ -358,14 +361,14 @@ def flatten_judgments(categories, judgments):
             ]
     return values
 
-def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, config, config_attr, error_categories, verbose=False):
+def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, config, config_attr, error_categories, verbose=False, bool_only=False):
     headers = {"Content-Type": "application/json"}
-    extraction_categories = error_categories["extraction"]
-    selection_categories = error_categories["selection"]
+    extraction_categories = error_categories["extraction"] if error_categories else []
+    selection_categories = error_categories["selection"] if error_categories else []
     total_targets = sum(len(targets) for targets in mapping_result_dict.values())
     row_number = 0
 
-    print(*build_header(error_categories), sep="\t")
+    print(*build_header(None if bool_only else error_categories), sep="\t")
 
     samples = load_json_file(biosample_json_file, "BioSample")
     for sample in samples:
@@ -398,7 +401,7 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                 )
             extraction_judgments = []
             selection_judgments = []
-            if term_id != "" and content.strip().lower() == "false":
+            if not bool_only and term_id != "" and content.strip().lower() == "false":
                 # Second pass: ask every extraction and selection category as an
                 # independent yes/no question. Both stages always run together;
                 # extraction_valid is just one more reported judgment, not a gate.
@@ -433,8 +436,9 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                 format_prob(emitted_token_prob),
                 format_prob(normalized_bool_prob)
             ]
-            row += flatten_judgments(extraction_categories, extraction_judgments)
-            row += flatten_judgments(selection_categories, selection_judgments)
+            if not bool_only:
+                row += flatten_judgments(extraction_categories, extraction_judgments)
+                row += flatten_judgments(selection_categories, selection_judgments)
             print(*row, sep="\t")
 
     return
@@ -468,6 +472,7 @@ def main():
     parser.add_argument("-a", '--config_attr', help='Attribute name, defined in config file, to be used for this run ', required=True)
     parser.add_argument("-u", '--url', help='URL of llama.cpp endpoint', required=True)
     parser.add_argument("-v", '--verbose', action="store_true", help='Print per-row and per-category progress to stderr')
+    parser.add_argument("--bool_only", action="store_true", help='Only run the first-pass mapping correctness judgment; skip the extraction/selection category classification pass')
 
     args = parser.parse_args()
     try:
@@ -487,7 +492,7 @@ def main():
         ontology_file = config["ontology_file"]
         base_dir = Path(__file__).resolve().parent
         ontology = get_ontology(f"file://{base_dir}/{ontology_file}").load()
-        error_categories = load_error_categories(args.error_category_file)
+        error_categories = None if args.bool_only else load_error_categories(args.error_category_file)
         total_time = time.time() - start_time
         print(f"Ontology loaded in {total_time:.2f} seconds", file=sys.stderr)
         mapping_result_dict = load_targets(
@@ -506,7 +511,8 @@ def main():
             config,
             args.config_attr,
             error_categories,
-            args.verbose
+            args.verbose,
+            args.bool_only
         )
         total_time = time.time() - start_time
         print(f"Evaluation completed in {total_time:.2f} seconds", file=sys.stderr)
