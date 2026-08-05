@@ -15,9 +15,24 @@ def load_ids(tsv_file):
     return ids
 
 
+def normalize(record):
+    source = record.get("BioSample", record)
+    normalized = {}
+    if "Description" in source:
+        normalized["Description"] = source["Description"]
+    if "Attributes" in source:
+        normalized["Attributes"] = source["Attributes"]
+    normalized["accession"] = record.get("accession")
+    return normalized
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Extract JSON Lines whose \"accession\" value is listed in a TSV file's first column"
+        description=(
+            "Extract JSON Lines whose \"accession\" value is listed in a TSV file's first column, "
+            "normalizing each record to top-level Description/Attributes/accession "
+            "(unwrapping a BioSample wrapper if present)"
+        )
     )
     parser.add_argument("tsv_file", help="Path to TSV file; 1st column holds accession IDs")
     parser.add_argument("jsonl_files", nargs="+", help="Path(s) to JSON Lines file(s) to filter")
@@ -36,7 +51,7 @@ def main():
                         continue
                     record = json.loads(stripped)
                     if record.get("accession") in ids:
-                        out.write(line if line.endswith("\n") else line + "\n")
+                        out.write(json.dumps(normalize(record), ensure_ascii=False) + "\n")
     finally:
         if args.output:
             out.close()
