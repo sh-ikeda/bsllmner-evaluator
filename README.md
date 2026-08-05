@@ -18,7 +18,7 @@ python bsllmner-evaluator.py -c input/evaluation_config.json -r examples/select_
 `-r`: Path to the TSV file converted from bsllmner-mk2 output, or to a bsllmner-mk2 select-output JSON file.
 `--evaluation_target_format`: Input format for `-r`: `auto`, `tsv`, or `json`. Default is `auto`.
 `-a`: The attribute to evaluate in this run, e.g. `cell_line` or `tissue`. The attribute must be defined in `evaluation_config.json`.
-`-b`: Path to the JSON file of the original BioSample datasets.
+`-b`: Path to the JSON (or JSON Lines, if the file extension is `.jsonl`) file of the original BioSample datasets.
 `--error_category_file`: Path to the JSON file defining error categories. Default is `input/error_categories.json`.
 `--bool_only`: Only run the first-pass mapping correctness judgment (`mapping_decision` and its probabilities); skip the extraction/selection category classification pass entirely. The output TSV then has only the first 7 columns, and `--error_category_file` is not read.
 
@@ -41,6 +41,7 @@ python bsllmner-evaluator.py -c input/evaluation_config.json -r examples/select_
   }
 ]
 ```
+If the file extension is `.jsonl`, it is instead read as JSON Lines: one BioSample record (the same object shape as above) per line, equivalent to the JSON array form.
 ### TSV-converted bsllmner-mk2 result
 ```tsv
 SAMD00004141	HeLa	CVCL_0030

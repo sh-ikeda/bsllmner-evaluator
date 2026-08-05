@@ -21,6 +21,29 @@ def load_json_file(json_file, description):
         raise UserInputError(f"Failed to parse {description} JSON '{json_file}': {e}") from e
 
 
+def load_jsonl_file(jsonl_file, description):
+    # Each line is one JSON object; the result is the list of those objects.
+    records = []
+    with open(jsonl_file, "r") as f:
+        for line_number, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError as e:
+                raise UserInputError(
+                    f"Failed to parse {description} JSONL '{jsonl_file}' line {line_number}: {e}"
+                ) from e
+    return records
+
+
+def load_biosample_file(biosample_json_file):
+    if Path(biosample_json_file).suffix == ".jsonl":
+        return load_jsonl_file(biosample_json_file, "BioSample")
+    return load_json_file(biosample_json_file, "BioSample")
+
+
 def dump_owl_term(ontology, term_id, base_uri, props_for_dump):
     # Keep ontology evidence compact; this string is inserted into the mapping prompt.
     dump_str = ""
@@ -370,7 +393,7 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
 
     print(*build_header(None if bool_only else error_categories), sep="\t")
 
-    samples = load_json_file(biosample_json_file, "BioSample")
+    samples = load_biosample_file(biosample_json_file)
     for sample in samples:
         bs_id = sample["accession"]
         for target in mapping_result_dict[bs_id]:
