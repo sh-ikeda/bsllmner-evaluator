@@ -12,6 +12,25 @@ class UserInputError(Exception):
     pass
 
 
+# Selection categories whose judgment depends on the actual candidate list
+# bsllmner-mk2 offered to its Stage 3 LLM selection step, rather than only
+# the sample and the final chosen term.
+CATEGORIES_NEEDING_CANDIDATES = {"selection_failed_to_reject", "selection_better_candidate_available"}
+
+# Mirrors bsllmner-mk2's is_label_prop() (bsllmner2/ontology_search.py): used to
+# break term_id ties the same way mk2's own candidate merge does.
+LABEL_LIKE_PROP_URIS = {
+    "http://www.w3.org/2000/01/rdf-schema#label",
+    "http://www.w3.org/2004/02/skos/core#prefLabel",
+    "http://www.w3.org/2004/02/skos/core#altLabel",
+    "http://www.w3.org/2004/02/skos/core#hiddenLabel",
+    "http://www.geneontology.org/formats/oboInOwl#hasExactSynonym",
+    "http://www.geneontology.org/formats/oboInOwl#hasRelatedSynonym",
+    "http://www.geneontology.org/formats/oboInOwl#hasBroadSynonym",
+    "http://www.geneontology.org/formats/oboInOwl#hasNarrowSynonym",
+}
+
+
 def load_json_file(json_file, description):
     # Attach the file role and path to JSON parse errors so CLI failures are actionable.
     try:
@@ -171,7 +190,40 @@ def build_prompt(sample, term_str, config):
     prompt = prompt.replace("{sample}", json.dumps(sample, indent=4)).replace("{term}", term_str)
     return prompt
 
-def build_category_prompt(sample, target, term_str, config_attr, category, stage):
+def collect_selection_candidates(pipeline_record, config_attr, extracted_value):
+    # Reconstructs exactly the candidate set bsllmner-mk2's Stage 3 selection
+    # step chose from, by replicating _collect_candidates_for_field()
+    # (bsllmner2/prompts/select.py): merge ontology-search and text2term
+    # candidates for this field/value and de-duplicate by term_id, preferring
+    # the hit whose prop_uri is a label-like property.
+    if not pipeline_record:
+        return []
+    search = pipeline_record.get("search_results", {}).get(config_attr, {}).get(extracted_value, [])
+    text2term = pipeline_record.get("text2term_results", {}).get(config_attr, {}).get(extracted_value, [])
+    by_term_id = {}
+    for result in list(search) + list(text2term):
+        term_id = result.get("term_id")
+        prev = by_term_id.get(term_id)
+        if prev is None or (
+            result.get("prop_uri") in LABEL_LIKE_PROP_URIS and prev.get("prop_uri") not in LABEL_LIKE_PROP_URIS
+        ):
+            by_term_id[term_id] = result
+    return list(by_term_id.values())
+
+def format_candidates_block(candidates, chosen_term_id):
+    # Presents the reconstructed candidate list the same way mk2 presented it
+    # to its own selection LLM (label + comments/definitions, no internal
+    # search-scoring fields), with the actually-chosen candidate marked.
+    lines = []
+    for candidate in candidates:
+        marker = " <- this is the one the selection step chose" if candidate.get("term_id") == chosen_term_id else ""
+        label = candidate.get("label") or "(no label)"
+        details = list(candidate.get("comments") or []) + list(candidate.get("definitions") or [])
+        detail_str = " ".join(details) if details else "(no comment or definition available)"
+        lines.append(f"- {candidate.get('term_id')}: \"{label}\" -- {detail_str}{marker}")
+    return "\n".join(lines)
+
+def build_category_prompt(sample, target, term_str, config_attr, category, stage, candidates=None):
     # One yes/no question per category, instead of an N-way choice, so each
     # judgment stays a simple, independently checkable question.
     extracted_value = format_tsv_value(target["extracted_value"])
@@ -190,6 +242,13 @@ metadata to the relevant ontology term representing the sample.
 As the "{config_attr}" attribute, the pipeline mapped the ontology term below:
 
 {term_for_prompt}"""
+        if candidates:
+            candidates_block = format_candidates_block(candidates, target["term_id"])
+            stage_instruction += f"""
+
+These are all the ontology candidates that were actually offered to the selection step for this value:
+
+{candidates_block}"""
 
     return f"""Here is metadata of a sample that was used for a biological experiment.
 
@@ -325,12 +384,19 @@ def post_category_prompt(prompt, url, headers):
         )
     return decision, emitted_token_prob, normalized_bool_prob, reason
 
-def classify_by_category(sample, target, term_str, config_attr, categories, stage, url, headers, verbose=False):
+def classify_by_category(sample, target, term_str, config_attr, categories, stage, url, headers, candidates=None, verbose=False):
     # Ask every category as an independent yes/no question rather than
     # forcing a single N-way choice; all judgments are kept, none discarded.
     judgments = []
     for category in categories:
-        prompt = build_category_prompt(sample, target, term_str, config_attr, category, stage)
+        if category["id"] in CATEGORIES_NEEDING_CANDIDATES and not candidates:
+            # No reconstructed mk2 candidate list to ground this judgment in
+            # (TSV input, or JSON input missing search/text2term results for
+            # this field/value) -- skip rather than ask ungrounded.
+            if verbose:
+                print(f"    [{stage}] {category['id']}: skipped (no candidate list available)", file=sys.stderr)
+            continue
+        prompt = build_category_prompt(sample, target, term_str, config_attr, category, stage, candidates)
         decision, emitted_prob, normalized_prob, reason = post_category_prompt(prompt, url, headers)
         if verbose:
             print(f"    [{stage}] {category['id']}: {decision}", file=sys.stderr)
@@ -454,9 +520,12 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                     "extraction",
                     url,
                     headers,
-                    verbose
+                    verbose=verbose
                 )
                 if target.get("selection_performed", True):
+                    candidates = collect_selection_candidates(
+                        target.get("pipeline_record"), config_attr, target["extracted_value"]
+                    )
                     selection_judgments = classify_by_category(
                         sample,
                         target,
@@ -466,7 +535,8 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                         "selection",
                         url,
                         headers,
-                        verbose
+                        candidates=candidates,
+                        verbose=verbose
                     )
                 elif verbose:
                     print("    [selection] skipped: not selected by the mk2 select stage", file=sys.stderr)

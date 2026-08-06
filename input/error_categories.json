@@ -28,19 +28,11 @@
   "selection": [
     {
       "id": "selection_failed_to_reject",
-      "description": "The extraction is reasonable, but none of the available ontology candidates is appropriate or there is not enough evidence, and the selection step should have rejected all candidates instead of producing a final mapping."
+      "description": "The candidate list below is the full set of ontology candidates that the bsllmner-mk2 selection step actually had to choose from for this value. None of them, including the one that was ultimately chosen, is an appropriate match for the BioSample metadata, and the selection step should have rejected all candidates instead of producing a final mapping."
     },
     {
-      "id": "selection_label_similarity_over_context",
-      "description": "The extraction is reasonable, but the selection step chose a candidate mainly because of label, synonym, or abbreviation similarity while ignoring the broader BioSample context."
-    },
-    {
-      "id": "selection_partial_match_accepted",
-      "description": "The extraction preserved the intended phrase, but the selection step accepted an ontology term that corresponds to only part of that phrase and loses important meaning."
-    },
-    {
-      "id": "selection_granularity_error",
-      "description": "The extraction is reasonable, but the selected ontology term is too broad, too narrow, or otherwise at an inappropriate level of specificity for the BioSample metadata."
+      "id": "selection_better_candidate_available",
+      "description": "The candidate list below is the full set of ontology candidates that the bsllmner-mk2 selection step actually had to choose from for this value. A candidate other than the one that was chosen is a more appropriate match for the BioSample metadata, but the selection step picked the wrong one instead."
     },
     {
       "id": "selection_valid",
