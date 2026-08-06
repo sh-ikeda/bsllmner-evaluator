@@ -85,13 +85,26 @@ def load_target_tsv(tsv_file):
                 "term_id": term_id,
                 "term_label": "",
                 "extracted_value": extracted_value,
-                "pipeline_record": None
+                "pipeline_record": None,
+                "selection_performed": True
             }
             if sep_line[0] in mapping_result_dict:
                 mapping_result_dict[accession].append(target)
             else:
                 mapping_result_dict[accession] = [target]
     return mapping_result_dict
+
+def selection_was_performed(pipeline_record, config_attr, extracted_value):
+    # bsllmner-mk2's select_timings only gets an entry for a field/value pair
+    # when Stage 3 (LLM selection) was actually invoked for it -- values
+    # resolved by an exact match in Stage 2 (ontology search/text2term) never
+    # reach Stage 3 and leave select_timings[config_attr] without that key.
+    # Older JSON exports without a select_timings key can't tell us either
+    # way, so treat those as "performed" to preserve prior behavior.
+    if "select_timings" not in pipeline_record:
+        return True
+    attr_timings = pipeline_record["select_timings"].get(config_attr, {})
+    return extracted_value in attr_timings
 
 def load_target_json(json_file, config_attr):
     # bsllmner-mk2 JSON preserves intermediate pipeline state for later error analysis.
@@ -106,11 +119,13 @@ def load_target_json(json_file, config_attr):
 
         if attr_results:
             for mapped_term in attr_results:
+                value = mapped_term.get("value", "")
                 entries.append({
                     "term_id": mapped_term.get("term_id", ""),
                     "term_label": mapped_term.get("label", ""),
-                    "extracted_value": mapped_term.get("value", ""),
-                    "pipeline_record": record
+                    "extracted_value": value,
+                    "pipeline_record": record,
+                    "selection_performed": selection_was_performed(record, config_attr, value)
                 })
         else:
             extracted = record.get("extract", {}).get("extracted")
@@ -123,7 +138,8 @@ def load_target_json(json_file, config_attr):
                 "term_id": "",
                 "term_label": "",
                 "extracted_value": extracted_value,
-                "pipeline_record": record
+                "pipeline_record": record,
+                "selection_performed": True
             })
 
         mapping_result_dict[accession] = entries
@@ -426,9 +442,9 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
             extraction_judgments = []
             selection_judgments = []
             if not bool_only and term_id != "" and content.strip().lower() == "false":
-                # Second pass: ask every extraction and selection category as an
-                # independent yes/no question. Both stages always run together;
-                # extraction_valid is just one more reported judgment, not a gate.
+                # Second pass: ask every extraction category as an independent
+                # yes/no question. extraction_valid is just one more reported
+                # judgment, not a gate.
                 extraction_judgments = classify_by_category(
                     sample,
                     target,
@@ -440,17 +456,20 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                     headers,
                     verbose
                 )
-                selection_judgments = classify_by_category(
-                    sample,
-                    target,
-                    term_str,
-                    config_attr,
-                    selection_categories,
-                    "selection",
-                    url,
-                    headers,
-                    verbose
-                )
+                if target.get("selection_performed", True):
+                    selection_judgments = classify_by_category(
+                        sample,
+                        target,
+                        term_str,
+                        config_attr,
+                        selection_categories,
+                        "selection",
+                        url,
+                        headers,
+                        verbose
+                    )
+                elif verbose:
+                    print("    [selection] skipped: not selected by the mk2 select stage", file=sys.stderr)
             row = [
                 bs_id,
                 format_tsv_value(target["extracted_value"]),
