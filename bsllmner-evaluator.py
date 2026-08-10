@@ -437,7 +437,7 @@ def build_header(error_categories):
     if error_categories is None:
         # bool_only mode: no classification pass, so no category columns.
         return header
-    # Category IDs already convey their stage (e.g. "extraction_wrong_attribute",
+    # Category IDs already convey their stage (e.g. "extraction_type_mismatch",
     # "selection_failed_to_reject"), and no ID collides across stages, so the
     # column name is just the ID itself rather than a redundant stage prefix.
     for categories in (error_categories["extraction"], error_categories["selection"]):
