@@ -127,7 +127,11 @@ def selection_was_performed(pipeline_record, config_attr, extracted_value):
 
 def load_target_json(json_file, config_attr):
     # bsllmner-mk2 JSON preserves intermediate pipeline state for later error analysis.
-    records = load_json_file(json_file, "evaluation target")
+    loaded_json = load_json_file(json_file, "evaluation target")
+    if "entries" in loaded_json:
+        records = loaded_json["entries"]
+    else:
+        records = loaded_json
 
     mapping_result_dict = {}
     for record in records:
