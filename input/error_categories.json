@@ -14,7 +14,7 @@
     },
     {
       "id": "extraction_hallucination",
-      "description": "The extracted value is not mentioned in the BioSample metadata and appears to have been hallucinated."
+      "description": "The extracted string does not appear as a substring in any of the BioSample attributes, Ids, description, or title, and appears to be generated through hallucination."
     },
     {
       "id": "ambiguous_source_metadata",
