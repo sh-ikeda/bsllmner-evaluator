@@ -22,6 +22,8 @@ def normalize(record):
         normalized["Description"] = source["Description"]
     if "Attributes" in source:
         normalized["Attributes"] = source["Attributes"]
+    if "Ids" in source:
+        normalized["Ids"] = source["Ids"]
     normalized["accession"] = record.get("accession")
     return normalized
 
