@@ -271,9 +271,9 @@ Consider whether the following statement correctly describes this {stage}:
 
 "{category['description']}"
 
-Does this statement apply? Output only a JSON object with these keys:
-- "decision": true or false.
+Does this statement apply? Output only a JSON object with these keys, in this order:
 - "reason": one concise sentence explaining the judgment. Keep it short.
+- "decision": true or false, consistent with the reason above.
 """
 
 def calc_normalized_bool_prob(decision, top_logprobs):
@@ -338,21 +338,27 @@ def post_bool_prompt(prompt, url, headers):
     return content, emitted_token_prob, normalized_bool_prob
 
 def find_bool_token_logprobs(content_logprobs):
-    # The decision is no longer necessarily the first content token (it now
-    # sits inside a {"decision": ..., "reason": ...} object), so scan for it.
+    # The decision sits inside a {"reason": ..., "decision": ...} object as
+    # the last field, generated after the reason text -- but the reason
+    # sentence itself may happen to contain the words "true"/"false" as
+    # prose, so scan from the end and take the last true/false token rather
+    # than the first, to land on the actual decision value.
     # The token itself carries a leading space here (JSON "key": value
     # syntax), e.g. " false", hence the stripped comparison.
-    for item in content_logprobs:
+    for item in reversed(content_logprobs):
         if item["token"].strip() in ("true", "false"):
             return item
     return None
 
 def post_category_prompt(prompt, url, headers):
-    # Category questions ask for a compact {"decision": bool, "reason": "..."}
-    # object in a single non-thinking pass. An earlier version enabled
-    # llama.cpp "thinking" to get a separate reasoning trace, but that made
-    # each category call take ~45-50s (up to 12+ minutes for a single row
-    # with 15 categories) -- too slow in practice, so thinking is off again.
+    # Category questions ask for a compact {"reason": "...", "decision": bool}
+    # object in a single non-thinking pass. Reason is generated before
+    # decision so the model's stated justification and its true/false verdict
+    # are more likely to agree, instead of committing to the verdict first and
+    # rationalizing it afterward. An earlier version enabled llama.cpp
+    # "thinking" to get a separate reasoning trace, but that made each
+    # category call take ~45-50s (up to 12+ minutes for a single row with 15
+    # categories) -- too slow in practice, so thinking is off again.
     payload = {
         "messages": [
             {
@@ -368,10 +374,10 @@ def post_category_prompt(prompt, url, headers):
             "schema": {
                 "type": "object",
                 "properties": {
-                    "decision": {"type": "boolean"},
-                    "reason": {"type": "string"}
+                    "reason": {"type": "string"},
+                    "decision": {"type": "boolean"}
                 },
-                "required": ["decision", "reason"]
+                "required": ["reason", "decision"]
             }
         },
         "temperature": 0,
