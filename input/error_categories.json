@@ -2,7 +2,7 @@
   "extraction": [
     {
       "id": "extraction_type_mismatch",
-      "description": "The concept type that the extracted string denotes does not match the evaluated attribute at all. This can be judged purely from the attribute name and the extracted string in isolation, without needing to read the BioSample metadata for context: would this string plausibly be the right kind of entity for this attribute at all, ignoring whether the specific role/status holds? Examples include extracting a drug or other treatment reagent as knockout_gene (not a gene at all, so this is a type mismatch even though 'knockout' also does not apply), a tissue name as disease, a disease mention as cell_type or tissue, or a treatment reagent as disease."
+      "description": "The concept type that the extracted string denotes does not match the evaluated attribute at all. This can be judged purely from the attribute name and the extracted string in isolation, without needing to read the BioSample metadata for context: would this string plausibly be the right kind of entity for this attribute at all, ignoring whether the specific role/status holds? Judge this at a coarse level, not a pedantic one: do not treat the extracted string as a type mismatch merely because it names the same underlying entity through a different naming convention, level of description, or closely related synonym than the attribute name literally suggests. Examples include extracting a drug or other treatment reagent as knockout_gene (not a gene at all, so this is a type mismatch even though 'knockout' also does not apply), a tissue name as disease, a disease mention as cell_type or tissue, or a treatment reagent as disease."
     },
     {
       "id": "extraction_wrong_role",
