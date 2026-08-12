@@ -12,6 +12,13 @@ class UserInputError(Exception):
     pass
 
 
+class CategoryResponseError(Exception):
+    # Raised when the LLM's category-classification response isn't valid
+    # JSON, or doesn't contain the expected "decision"/"reason" keys --
+    # i.e. the model didn't follow response_format for this call.
+    pass
+
+
 # Selection categories whose judgment depends on the actual candidate list
 # bsllmner-mk2 offered to its Stage 3 LLM selection step, rather than only
 # the sample and the final chosen term.
@@ -373,9 +380,12 @@ def post_category_prompt(prompt, url, headers):
     response = requests.post(url, headers=headers, json=payload)
     data = response.json()["choices"][0]
     content = data["message"]["content"]
-    parsed = json.loads(content)
-    decision = "true" if parsed["decision"] else "false"
-    reason = str(parsed["reason"]).strip()
+    try:
+        parsed = json.loads(content)
+        decision = "true" if parsed["decision"] else "false"
+        reason = str(parsed["reason"]).strip()
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        raise CategoryResponseError(f"{e}. Raw response content: {content!r}") from e
 
     bool_token_logprobs = find_bool_token_logprobs(data["logprobs"]["content"])
     if bool_token_logprobs is None:
@@ -401,7 +411,15 @@ def classify_by_category(sample, target, term_str, config_attr, categories, stag
                 print(f"    [{stage}] {category['id']}: skipped (no candidate list available)", file=sys.stderr)
             continue
         prompt = build_category_prompt(sample, target, term_str, config_attr, category, stage, candidates)
-        decision, emitted_prob, normalized_prob, reason = post_category_prompt(prompt, url, headers)
+        try:
+            decision, emitted_prob, normalized_prob, reason = post_category_prompt(prompt, url, headers)
+        except CategoryResponseError as e:
+            print(
+                f"Error: [{stage}] {category['id']} judgment failed for "
+                f"{sample.get('accession')} (term_id={target.get('term_id')}): {e}",
+                file=sys.stderr
+            )
+            continue
         if verbose:
             print(f"    [{stage}] {category['id']}: {decision}", file=sys.stderr)
         judgments.append({
