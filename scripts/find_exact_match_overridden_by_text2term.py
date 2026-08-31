@@ -47,20 +47,24 @@ def main():
             "kept; unrelated attributes are omitted."
         )
     )
-    parser.add_argument("select_result_file", help="Path to json file output by bsllmner-mk2-select")
+    parser.add_argument(
+        "select_result_files", nargs="+", help="Path(s) to json file(s) output by bsllmner-mk2-select"
+    )
     parser.add_argument("-o", "--output", help="Path to output JSON file (default: stdout)")
 
     args = parser.parse_args()
-    with open(args.select_result_file, "r") as f:
-        data = json.load(f)
-
-    # bsllmner-mk2 select-output JSON is either a bare list of entries or a dict
-    # with an "entries" key (mirrors select_result_to_tsv.py's handling).
-    entries = data["entries"] if isinstance(data, dict) else data
 
     matched = []
-    for entry in entries:
-        matched.extend(find_matches(entry))
+    for select_result_file in args.select_result_files:
+        with open(select_result_file, "r") as f:
+            data = json.load(f)
+
+        # bsllmner-mk2 select-output JSON is either a bare list of entries or a dict
+        # with an "entries" key (mirrors select_result_to_tsv.py's handling).
+        entries = data["entries"] if isinstance(data, dict) else data
+
+        for entry in entries:
+            matched.extend(find_matches(entry))
 
     out = open(args.output, "w") if args.output else sys.stdout
     try:
