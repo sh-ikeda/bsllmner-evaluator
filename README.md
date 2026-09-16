@@ -20,6 +20,8 @@ python bsllmner-evaluator.py -c input/evaluation_config.json -r examples/select_
 `-a`: The attribute to evaluate in this run, e.g. `cell_line` or `tissue`. The attribute must be defined in `evaluation_config.json`.
 `-b`: Path to the JSON (or JSON Lines, if the file extension is `.jsonl`) file of the original BioSample datasets.
 `--error_category_file`: Path to the JSON file defining error categories. Default is `input/error_categories.json`.
+`-u`: URL of the llama.cpp `/v1/chat/completions` endpoint.
+`-v`: Print per-row and per-category progress to stderr.
 `--bool_only`: Only run the first-pass mapping correctness judgment (`mapping_decision` and its probabilities); skip the extraction/selection category classification pass entirely. The output TSV then has only the first 7 columns, and `--error_category_file` is not read.
 
 ## Format
