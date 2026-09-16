@@ -381,7 +381,9 @@ def post_category_prompt(prompt, url, headers):
             }
         },
         "temperature": 0,
-        "logprobs": True
+        "logprobs": True,
+        "repeat_penalty": 1.15,
+        "max_tokens": 512
     }
     response = requests.post(url, headers=headers, json=payload)
     data = response.json()["choices"][0]
