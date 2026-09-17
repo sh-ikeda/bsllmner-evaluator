@@ -272,7 +272,8 @@ Consider whether the following statement correctly describes this {stage}:
 "{category['description']}"
 
 Does this statement apply? Output only a JSON object with these keys, in this order:
-- "reason": one concise sentence explaining the judgment. Keep it short.
+- "reason": one concise sentence explaining the judgment. Keep it short. State your \
+final judgment directly -- do not weigh multiple hypotheses back and forth.
 - "decision": true or false, consistent with the reason above.
 """
 
@@ -383,7 +384,7 @@ def post_category_prompt(prompt, url, headers):
         "temperature": 0,
         "logprobs": True,
         "repeat_penalty": 1.15,
-        "max_tokens": 512
+        "max_tokens": 1024
     }
     response = requests.post(url, headers=headers, json=payload)
     data = response.json()["choices"][0]
