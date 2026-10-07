@@ -79,3 +79,14 @@ accession	extracted_value	term_id	term_label	mapping_decision	mapping_probabilit
 SAMD00004141	HeLa	CVCL_0030	HeLa	true	0.872	0.914											
 SAMD00008684	SH-SY5Y	CVCL_0019	SH-SY5Y	false	0.468	0.731	false	0.81	0.81	The extracted value correctly matches the cell_line attribute.	...	true	0.93	0.97	The extracted value is appropriate for the evaluated attribute.	true	0.81	0.88	The candidates did not contain a term well supported by the sample metadata.	...
 ```
+
+## Scripts
+Helper scripts under `scripts/`. Run each with `-h` for its arguments (except `run_eval.sh`).
+
+- `run_eval.sh SELECT_RESULT_JSON PREFIX BS_JSON_DIR ATTR...`: Batch pipeline. For each attribute, converts a bsllmner-mk2 select-output JSON to the evaluation target TSV, fetches the BioSample JSONs from DDBJ Search into `BS_JSON_DIR/ATTR/`, converts them to the BioSample JSON format above, and runs the evaluator against `http://localhost:11438/v1/chat/completions`. Requires `wget` and `jq`.
+- `select_result_to_tsv.py`: Converts bsllmner-mk2 select-output JSON into a TSV of accession, extracted value, term ID, and term label for one attribute.
+- `select_result_v1_to_tsv.py`: Same as above, for the older (v1) select-output JSON format.
+- `filter_mk2_output_by_tsv_ids.py`: Extracts entries from bsllmner-mk2 select-output JSON file(s) whose accession is listed in the first column of a TSV.
+- `filter_jsonl_by_tsv_ids.py`: Extracts BioSample records from JSON Lines file(s) whose accession is listed in the first column of a TSV, normalizing each record to top-level `Description`/`Attributes`/`Ids`/`accession`.
+- `find_exact_match_overridden_by_text2term.py`: Finds attribute values in bsllmner-mk2 select-output JSON where multiple terms exact-matched in `search_results`, but the adopted term came from text2term instead.
+- `dedup_matches_by_attr_value.py`: Deduplicates the output of `find_exact_match_overridden_by_text2term.py`, keeping the first sample for each (attribute, value) pair.
