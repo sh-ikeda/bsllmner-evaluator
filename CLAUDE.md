@@ -13,6 +13,7 @@ Communicate with the user in Japanese (日本語). This applies to chat response
 - Don't change error-handling behavior (fail-fast on malformed TSV/config, warn-and-continue on missing ontology terms) without asking first.
 - Don't edit or add untracked files unless the user explicitly asks (several exist locally: examples, local input data, scratch scripts).
 - If you add/change output TSV columns, update `README.md`, or flag it as stale if you can't.
+- `README.ja.md` is the Japanese translation of `README.md`; whenever you edit one, apply the same change to the other.
 
 ## Validation
 
