@@ -1,6 +1,12 @@
 # bsllmner-evaluator
 Evaluate outputs of [bsllmner-mk2](https://github.com/dbcls/bsllmner-mk2) with LLMs
 
+## Requirements
+Python 3 with the packages in `requirements.txt`:
+```
+pip install -r requirements.txt
+```
+
 ## Usage
 ```
 python bsllmner-evaluator.py -c input/evaluation_config.json -r bsllmner-result.tsv -a attr -b biosample.json -u http://localhost:11438/v1/chat/completions

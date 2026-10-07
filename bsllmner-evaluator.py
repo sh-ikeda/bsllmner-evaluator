@@ -19,6 +19,22 @@ class CategoryResponseError(Exception):
     pass
 
 
+class LLMRequestError(Exception):
+    # Raised when the llama.cpp endpoint can't be reached, keeps failing
+    # after retries, or returns a response without the expected structure.
+    pass
+
+
+# Per-request (connect, read) timeout in seconds, and how many times a
+# request is attempted in total before giving up on transient failures
+# (connection errors, timeouts, HTTP 5xx).
+REQUEST_TIMEOUT = (10, 600)
+MAX_REQUEST_ATTEMPTS = 4
+RETRY_BASE_DELAY = 5
+
+# Per-category output columns, in order; also the judgment dict keys.
+CATEGORY_JUDGMENT_FIELDS = ("decision", "probability", "normalized_probability", "reason")
+
 # Selection categories whose judgment depends on the actual candidate list
 # bsllmner-mk2 offered to its Stage 3 LLM selection step, rather than only
 # the sample and the final chosen term.
@@ -70,12 +86,13 @@ def load_biosample_file(biosample_json_file):
     return load_json_file(biosample_json_file, "BioSample")
 
 
-def dump_owl_term(ontology, term_id, base_uri, props_for_dump):
+def find_owl_term(ontology, term_id, base_uri):
+    # Returns None when the term isn't in the ontology.
+    return ontology.get_namespace(base_uri)[term_id]
+
+def dump_owl_term(term, props_for_dump):
     # Keep ontology evidence compact; this string is inserted into the mapping prompt.
     dump_str = ""
-    ns = ontology.get_namespace(base_uri)
-    term = ns[term_id]
-
     for prop in props_for_dump:
         try:
             values = getattr(term, prop)
@@ -86,10 +103,8 @@ def dump_owl_term(ontology, term_id, base_uri, props_for_dump):
 
     return dump_str
 
-def get_label(ontology, term_id, base_uri):
-    ns = ontology.get_namespace(base_uri)
-    term = ns[term_id]
-    return term.label[0]
+def get_label(term):
+    return term.label[0] if term.label else ""
 
 def ontology_local_id(term_id):
     return term_id.replace(":", "_", 1)
@@ -99,7 +114,10 @@ def load_target_tsv(tsv_file):
     mapping_result_dict = {}
     with open(tsv_file, "r") as f:
         for line_number, line in enumerate(f, start=1):
-            sep_line = line.strip(' \n\r').split('\t')
+            line = line.strip(' \n\r')
+            if not line:
+                continue
+            sep_line = line.split('\t')
             if len(sep_line) not in (3, 4):
                 raise UserInputError(
                     f"Malformed evaluation target TSV '{tsv_file}' line {line_number}: "
@@ -114,7 +132,7 @@ def load_target_tsv(tsv_file):
                 "pipeline_record": None,
                 "selection_performed": True
             }
-            if sep_line[0] in mapping_result_dict:
+            if accession in mapping_result_dict:
                 mapping_result_dict[accession].append(target)
             else:
                 mapping_result_dict[accession] = [target]
@@ -277,11 +295,16 @@ final judgment directly -- do not weigh multiple hypotheses back and forth.
 - "decision": true or false, consistent with the reason above.
 """
 
-def calc_normalized_bool_prob(decision, top_logprobs):
+def calc_normalized_bool_prob(decision, top_logprobs, strip_token=False):
     # Only exact true/false tokens are included, matching the repository's confidence definition.
+    # strip_token tolerates incidental whitespace around the token: inside a
+    # {"reason": ..., "decision": ...} object the value token is naturally
+    # emitted as " true"/" false" (JSON "key": value syntax), unlike the
+    # top-level boolean case where content has no such prefix and the strict
+    # exact-match rule applies.
     bool_probs = {"true": 0.0, "false": 0.0}
     for item in top_logprobs:
-        token = item["token"]
+        token = item["token"].strip() if strip_token else item["token"]
         if token in bool_probs:
             bool_probs[token] += exp(item["logprob"])
 
@@ -291,23 +314,31 @@ def calc_normalized_bool_prob(decision, top_logprobs):
         return ""
     return bool_probs[decision] / total
 
-def calc_normalized_bool_prob_loose(decision, top_logprobs):
-    # Same as calc_normalized_bool_prob, but tolerant of a leading space on
-    # the true/false token. Inside a {"decision": ..., "reason": ...} object
-    # the value token is naturally emitted as " true"/" false" (JSON "key":
-    # value syntax), unlike the top-level boolean case where content has no
-    # such prefix and the strict exact-match rule applies.
-    bool_probs = {"true": 0.0, "false": 0.0}
-    for item in top_logprobs:
-        token = item["token"].strip()
-        if token in bool_probs:
-            bool_probs[token] += exp(item["logprob"])
+def post_chat_completion(payload, url, headers):
+    # Retries transient failures (connection errors, timeouts, HTTP 5xx) with
+    # exponential backoff; anything else, or exhausting the retries, raises
+    # LLMRequestError so the run stops instead of writing bogus rows.
+    for attempt in range(1, MAX_REQUEST_ATTEMPTS + 1):
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+        except (requests.ConnectionError, requests.Timeout) as e:
+            error = f"{type(e).__name__}: {e}"
+        else:
+            if response.status_code < 500:
+                break
+            error = f"HTTP {response.status_code}: {response.text[:500]}"
+        if attempt == MAX_REQUEST_ATTEMPTS:
+            raise LLMRequestError(f"Request to {url} failed after {attempt} attempts: {error}")
+        delay = RETRY_BASE_DELAY * 2 ** (attempt - 1)
+        print(f"Warning: Request to {url} failed ({error}); retrying in {delay}s", file=sys.stderr)
+        time.sleep(delay)
 
-    decision = decision.strip().lower()
-    total = bool_probs["true"] + bool_probs["false"]
-    if decision not in bool_probs or total == 0:
-        return ""
-    return bool_probs[decision] / total
+    if response.status_code != 200:
+        raise LLMRequestError(f"Request to {url} failed with HTTP {response.status_code}: {response.text[:500]}")
+    try:
+        return response.json()["choices"][0]
+    except (ValueError, KeyError, IndexError, TypeError) as e:
+        raise LLMRequestError(f"Unexpected response from {url}: {response.text[:500]}") from e
 
 def post_bool_prompt(prompt, url, headers):
     # Boolean prompts use the observed llama.cpp response_format/logprobs settings.
@@ -330,8 +361,7 @@ def post_bool_prompt(prompt, url, headers):
         "temperature": 0,
         "logprobs": True
     }
-    response = requests.post(url, headers=headers, json=payload)
-    data = response.json()["choices"][0]
+    data = post_chat_completion(payload, url, headers)
     content = data["message"]["content"]  # true / false
     first_token_logprobs = data["logprobs"]["content"][0]
     emitted_token_prob = exp(first_token_logprobs["logprob"])
@@ -386,8 +416,7 @@ def post_category_prompt(prompt, url, headers):
         "repeat_penalty": 1.15,
         "max_tokens": 1024
     }
-    response = requests.post(url, headers=headers, json=payload)
-    data = response.json()["choices"][0]
+    data = post_chat_completion(payload, url, headers)
     content = data["message"]["content"]
     try:
         parsed = json.loads(content)
@@ -402,8 +431,8 @@ def post_category_prompt(prompt, url, headers):
         normalized_bool_prob = ""
     else:
         emitted_token_prob = exp(bool_token_logprobs["logprob"])
-        normalized_bool_prob = calc_normalized_bool_prob_loose(
-            decision, bool_token_logprobs["top_logprobs"]
+        normalized_bool_prob = calc_normalized_bool_prob(
+            decision, bool_token_logprobs["top_logprobs"], strip_token=True
         )
     return decision, emitted_token_prob, normalized_bool_prob, reason
 
@@ -473,12 +502,7 @@ def build_header(error_categories):
     # column name is just the ID itself rather than a redundant stage prefix.
     for categories in (error_categories["extraction"], error_categories["selection"]):
         for category in categories:
-            header += [
-                f"{category['id']}_decision",
-                f"{category['id']}_probability",
-                f"{category['id']}_normalized_probability",
-                f"{category['id']}_reason"
-            ]
+            header += [f"{category['id']}_{field}" for field in CATEGORY_JUDGMENT_FIELDS]
     return header
 
 def flatten_judgments(categories, judgments):
@@ -488,26 +512,35 @@ def flatten_judgments(categories, judgments):
     for category in categories:
         judgment = judgment_by_category.get(category["id"])
         if judgment is None:
-            values += ["", "", "", ""]
+            values += [""] * len(CATEGORY_JUDGMENT_FIELDS)
         else:
-            values += [
-                judgment["decision"],
-                judgment["probability"],
-                judgment["normalized_probability"],
-                format_tsv_value(judgment["reason"])
-            ]
+            values += [format_tsv_value(judgment[field]) for field in CATEGORY_JUDGMENT_FIELDS]
     return values
 
 def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, config, config_attr, error_categories, verbose=False, bool_only=False):
     headers = {"Content-Type": "application/json"}
     extraction_categories = error_categories["extraction"] if error_categories else []
     selection_categories = error_categories["selection"] if error_categories else []
-    total_targets = sum(len(targets) for targets in mapping_result_dict.values())
     row_number = 0
 
     print(*build_header(None if bool_only else error_categories), sep="\t")
 
-    samples = load_biosample_file(biosample_json_file)
+    # Samples without evaluation targets are skipped; targets without a
+    # sample can't be evaluated and are reported below.
+    samples = [
+        sample for sample in load_biosample_file(biosample_json_file)
+        if sample["accession"] in mapping_result_dict
+    ]
+    sample_ids = {sample["accession"] for sample in samples}
+    missing_sample_ids = sorted(set(mapping_result_dict) - sample_ids)
+    if missing_sample_ids:
+        print(
+            f"Warning: {len(missing_sample_ids)} evaluation target accession(s) not found in "
+            f"{biosample_json_file}, skipped: {', '.join(missing_sample_ids)}",
+            file=sys.stderr
+        )
+    total_targets = sum(len(mapping_result_dict[bs_id]) for bs_id in sample_ids)
+
     for sample in samples:
         bs_id = sample["accession"]
         for target in mapping_result_dict[bs_id]:
@@ -522,10 +555,19 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
                 term_str = ""
             else:
                 # Mapped cases include ontology evidence in the first-pass mapping prompt.
-                local_term_id = ontology_local_id(term_id)
-                term_str = dump_owl_term(ontology, local_term_id, config["base_uri"], config["props_for_dump"])
+                term = find_owl_term(ontology, ontology_local_id(term_id), config["base_uri"])
+                if term is None:
+                    # Still judged as a mapped case, with only the ID (and the
+                    # label from the target file, if any) as evidence.
+                    print(f"Warning: {term_id} is not found in the ontology", file=sys.stderr)
+                    term_label = target["term_label"]
+                    term_str = f"  id: {term_id}\n"
+                    if term_label:
+                        term_str += f"  label: {term_label}\n"
+                else:
+                    term_str = dump_owl_term(term, config["props_for_dump"])
+                    term_label = target["term_label"] or get_label(term)
                 prompt = build_prompt(sample, term_str, config)
-                term_label = target["term_label"] or get_label(ontology, local_term_id, config["base_uri"])
 
             # First pass: judge whether the final mapping or non-mapping decision is correct.
             content, emitted_token_prob, normalized_bool_prob = post_bool_prompt(prompt, url, headers)
@@ -663,7 +705,7 @@ def main():
     except FileNotFoundError as e:
         print(f"Error: File not found - {e}", file=sys.stderr)
         sys.exit(1)
-    except UserInputError as e:
+    except (UserInputError, LLMRequestError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 

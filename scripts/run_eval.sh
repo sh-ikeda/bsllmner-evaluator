@@ -16,7 +16,7 @@ fi
 for attr in "$@"; do
     python $SCRIPT_DIR/select_result_to_tsv.py $SELECT_RESULT_JSON $attr > ${PREFIX}_result_${attr}.tsv
     awk -F "\t" '$3&&!a[$2 $3 $4]++' ${PREFIX}_result_${attr}.tsv > ${PREFIX}_result_${attr}_uniq.tsv
-    awk -F "\t" -vOFS="\t" '$3&&!a[$2 $3 $4]++{print $1,gensub(":","_","g",$3),$2}' ${PREFIX}_result_${attr}.tsv > ${PREFIX}_result_${attr}_uniq_pairs.tsv
+    awk -F "\t" -vOFS="\t" '$3&&!a[$2 $3 $4]++{print $1,$2,$3}' ${PREFIX}_result_${attr}.tsv > ${PREFIX}_result_${attr}_uniq_pairs.tsv
     wc -l ${PREFIX}_result_${attr}_uniq_pairs.tsv >&2
     cut -f 1 ${PREFIX}_result_${attr}_uniq_pairs.tsv | while read id; do
         wget -q -nc -P $BS_JSON_DIR/$attr https://ddbj.nig.ac.jp/search/entry/biosample/$id.json || echo "Failed to fetch BioSample JSON: $id" >&2
