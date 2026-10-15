@@ -30,6 +30,7 @@ python bsllmner-evaluator.py -c input/evaluation_config.json -r examples/select_
 `--error_category_file`: エラーカテゴリを定義した JSON ファイルのパス。デフォルトは `input/error_categories.json`。
 `-u`: llama.cpp の `/v1/chat/completions` エンドポイントの URL。
 `-v`: 行ごと・カテゴリごとの進捗を標準エラー出力に表示します。
+`-j`, `--parallel`: llama.cpp エンドポイントに同時に送るリクエスト数。サーバーの `-np`/`--parallel` のスロット数に合わせて指定します。出力行の順序は入力の順のままです。`-j` が 2 以上の場合、各行の標準エラー出力のメッセージは、その行の処理が終わった時点でまとめて表示されます。デフォルトは 1。
 `--bool_only`: 1 段目のマッピング正否判定（`mapping_decision` とその確率）だけを行い、extraction/selection のカテゴリ分類は一切行いません。このとき出力 TSV は最初の 7 列のみとなり、`--error_category_file` は読み込まれません。
 
 ## フォーマット

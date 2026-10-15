@@ -3,6 +3,8 @@ import argparse
 import json
 import time
 import requests
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from math import exp
 from owlready2 import get_ontology
 from pathlib import Path
@@ -35,6 +37,12 @@ RETRY_BASE_DELAY = 5
 # Per-category output columns, in order; also the judgment dict keys.
 CATEGORY_JUDGMENT_FIELDS = ("decision", "probability", "normalized_probability", "reason")
 
+# Per worker, how many rows may be queued ahead of the oldest unfinished row.
+# Rows are printed in input order, so a slow row (one that goes through every
+# category) holds back finished rows behind it; this keeps workers busy
+# meanwhile without preparing the whole input up front.
+PENDING_ROWS_PER_WORKER = 16
+
 # Selection categories whose judgment depends on the actual candidate list
 # bsllmner-mk2 offered to its Stage 3 LLM selection step, rather than only
 # the sample and the final chosen term.
@@ -52,6 +60,25 @@ LABEL_LIKE_PROP_URIS = {
     "http://www.geneontology.org/formats/oboInOwl#hasBroadSynonym",
     "http://www.geneontology.org/formats/oboInOwl#hasNarrowSynonym",
 }
+
+
+class RowLog:
+    # Collects one row's stderr messages. With parallel workers, messages are
+    # held and flushed with the row, so different rows don't interleave.
+    def __init__(self, buffered):
+        self.buffered = buffered
+        self.lines = []
+
+    def print(self, message):
+        if self.buffered:
+            self.lines.append(message)
+        else:
+            print(message, file=sys.stderr)
+
+    def flush(self):
+        for line in self.lines:
+            print(line, file=sys.stderr)
+        self.lines = []
 
 
 def load_json_file(json_file, description):
@@ -436,7 +463,7 @@ def post_category_prompt(prompt, url, headers):
         )
     return decision, emitted_token_prob, normalized_bool_prob, reason
 
-def classify_by_category(sample, target, term_str, config_attr, categories, stage, url, headers, candidates=None, verbose=False):
+def classify_by_category(sample, target, term_str, config_attr, categories, stage, url, headers, log, candidates=None, verbose=False):
     # Ask every category as an independent yes/no question rather than
     # forcing a single N-way choice; all judgments are kept, none discarded.
     judgments = []
@@ -446,20 +473,19 @@ def classify_by_category(sample, target, term_str, config_attr, categories, stag
             # (TSV input, or JSON input missing search/text2term results for
             # this field/value) -- skip rather than ask ungrounded.
             if verbose:
-                print(f"    [{stage}] {category['id']}: skipped (no candidate list available)", file=sys.stderr)
+                log.print(f"    [{stage}] {category['id']}: skipped (no candidate list available)")
             continue
         prompt = build_category_prompt(sample, target, term_str, config_attr, category, stage, candidates)
         try:
             decision, emitted_prob, normalized_prob, reason = post_category_prompt(prompt, url, headers)
         except CategoryResponseError as e:
-            print(
+            log.print(
                 f"Error: [{stage}] {category['id']} judgment failed for "
-                f"{sample.get('accession')} (term_id={target.get('term_id')}): {e}",
-                file=sys.stderr
+                f"{sample.get('accession')} (term_id={target.get('term_id')}): {e}"
             )
             continue
         if verbose:
-            print(f"    [{stage}] {category['id']}: {decision}", file=sys.stderr)
+            log.print(f"    [{stage}] {category['id']}: {decision}")
         judgments.append({
             "category": category["id"],
             "decision": decision,
@@ -517,10 +543,95 @@ def flatten_judgments(categories, judgments):
             values += [format_tsv_value(judgment[field]) for field in CATEGORY_JUDGMENT_FIELDS]
     return values
 
-def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, config, config_attr, error_categories, verbose=False, bool_only=False):
-    headers = {"Content-Type": "application/json"}
+def prepare_target(ontology, sample, target, config, log):
+    # Ontology lookups run on the main thread only; owlready2 isn't relied on
+    # to be thread-safe, so worker threads just talk to the LLM endpoint.
+    term_id = target["term_id"]
+    if term_id == "":
+        # Non-mapped cases stop after the configured non-mapping true/false prompt.
+        return "", "", build_prompt(sample, "", config)
+
+    # Mapped cases include ontology evidence in the first-pass mapping prompt.
+    term = find_owl_term(ontology, ontology_local_id(term_id), config["base_uri"])
+    if term is None:
+        # Still judged as a mapped case, with only the ID (and the
+        # label from the target file, if any) as evidence.
+        log.print(f"Warning: {term_id} is not found in the ontology")
+        term_label = target["term_label"]
+        term_str = f"  id: {term_id}\n"
+        if term_label:
+            term_str += f"  label: {term_label}\n"
+    else:
+        term_str = dump_owl_term(term, config["props_for_dump"])
+        term_label = target["term_label"] or get_label(term)
+    return term_str, term_label, build_prompt(sample, term_str, config)
+
+def judge_target(sample, target, term_str, term_label, prompt, url, headers, config_attr, error_categories, log, verbose=False, bool_only=False):
+    # All LLM calls for one output row; safe to run on a worker thread.
+    bs_id = sample["accession"]
+    term_id = target["term_id"]
     extraction_categories = error_categories["extraction"] if error_categories else []
     selection_categories = error_categories["selection"] if error_categories else []
+
+    # First pass: judge whether the final mapping or non-mapping decision is correct.
+    content, emitted_token_prob, normalized_bool_prob = post_bool_prompt(prompt, url, headers)
+    if verbose:
+        log.print(f"  mapping decision: {content.strip().lower()}")
+    if normalized_bool_prob == "":
+        log.print(f"Warning: Could not calculate normalized boolean probability for {bs_id}\t{term_id}\t{content}")
+    extraction_judgments = []
+    selection_judgments = []
+    if not bool_only and term_id != "" and content.strip().lower() == "false":
+        # Second pass: ask every extraction category as an independent
+        # yes/no question. extraction_valid is just one more reported
+        # judgment, not a gate.
+        extraction_judgments = classify_by_category(
+            sample,
+            target,
+            term_str,
+            config_attr,
+            extraction_categories,
+            "extraction",
+            url,
+            headers,
+            log,
+            verbose=verbose
+        )
+        if target.get("selection_performed", True):
+            candidates = collect_selection_candidates(
+                target.get("pipeline_record"), config_attr, target["extracted_value"]
+            )
+            selection_judgments = classify_by_category(
+                sample,
+                target,
+                term_str,
+                config_attr,
+                selection_categories,
+                "selection",
+                url,
+                headers,
+                log,
+                candidates=candidates,
+                verbose=verbose
+            )
+        elif verbose:
+            log.print("    [selection] skipped: not selected by the mk2 select stage")
+    row = [
+        bs_id,
+        format_tsv_value(target["extracted_value"]),
+        term_id,
+        term_label,
+        content,
+        format_prob(emitted_token_prob),
+        format_prob(normalized_bool_prob)
+    ]
+    if not bool_only:
+        row += flatten_judgments(extraction_categories, extraction_judgments)
+        row += flatten_judgments(selection_categories, selection_judgments)
+    return row
+
+def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, config, config_attr, error_categories, verbose=False, bool_only=False, parallel=1):
+    headers = {"Content-Type": "application/json"}
     row_number = 0
 
     print(*build_header(None if bool_only else error_categories), sep="\t")
@@ -541,91 +652,44 @@ def eval_mappings(ontology, mapping_result_dict, biosample_json_file, url, confi
         )
     total_targets = sum(len(mapping_result_dict[bs_id]) for bs_id in sample_ids)
 
-    for sample in samples:
-        bs_id = sample["accession"]
-        for target in mapping_result_dict[bs_id]:
-            row_number += 1
-            term_id = target["term_id"]
-            if verbose:
-                print(f"[{row_number}/{total_targets}] {bs_id}\t{term_id}", file=sys.stderr)
-            if term_id == "":
-                # Non-mapped cases stop after the configured non-mapping true/false prompt.
-                prompt = build_prompt(sample, "", config)
-                term_label = ""
-                term_str = ""
-            else:
-                # Mapped cases include ontology evidence in the first-pass mapping prompt.
-                term = find_owl_term(ontology, ontology_local_id(term_id), config["base_uri"])
-                if term is None:
-                    # Still judged as a mapped case, with only the ID (and the
-                    # label from the target file, if any) as evidence.
-                    print(f"Warning: {term_id} is not found in the ontology", file=sys.stderr)
-                    term_label = target["term_label"]
-                    term_str = f"  id: {term_id}\n"
-                    if term_label:
-                        term_str += f"  label: {term_label}\n"
-                else:
-                    term_str = dump_owl_term(term, config["props_for_dump"])
-                    term_label = target["term_label"] or get_label(term)
-                prompt = build_prompt(sample, term_str, config)
+    # Rows are judged by up to `parallel` worker threads but printed in input
+    # order, each with its buffered stderr messages. With parallel == 1, each
+    # row is finished before the next is prepared, so messages can go to
+    # stderr immediately, as before.
+    max_pending = parallel * PENDING_ROWS_PER_WORKER if parallel > 1 else 0
+    pending = deque()
 
-            # First pass: judge whether the final mapping or non-mapping decision is correct.
-            content, emitted_token_prob, normalized_bool_prob = post_bool_prompt(prompt, url, headers)
-            if verbose:
-                print(f"  mapping decision: {content.strip().lower()}", file=sys.stderr)
-            if normalized_bool_prob == "":
-                print(
-                    f"Warning: Could not calculate normalized boolean probability for {bs_id}\t{term_id}\t{content}",
-                    file=sys.stderr
+    def emit_oldest():
+        future, log = pending.popleft()
+        try:
+            row = future.result()
+        finally:
+            log.flush()
+        print(*row, sep="\t")
+
+    executor = ThreadPoolExecutor(max_workers=parallel)
+    try:
+        for sample in samples:
+            bs_id = sample["accession"]
+            for target in mapping_result_dict[bs_id]:
+                row_number += 1
+                log = RowLog(buffered=parallel > 1)
+                if verbose:
+                    log.print(f"[{row_number}/{total_targets}] {bs_id}\t{target['term_id']}")
+                term_str, term_label, prompt = prepare_target(ontology, sample, target, config, log)
+                future = executor.submit(
+                    judge_target, sample, target, term_str, term_label, prompt, url, headers,
+                    config_attr, error_categories, log, verbose, bool_only
                 )
-            extraction_judgments = []
-            selection_judgments = []
-            if not bool_only and term_id != "" and content.strip().lower() == "false":
-                # Second pass: ask every extraction category as an independent
-                # yes/no question. extraction_valid is just one more reported
-                # judgment, not a gate.
-                extraction_judgments = classify_by_category(
-                    sample,
-                    target,
-                    term_str,
-                    config_attr,
-                    extraction_categories,
-                    "extraction",
-                    url,
-                    headers,
-                    verbose=verbose
-                )
-                if target.get("selection_performed", True):
-                    candidates = collect_selection_candidates(
-                        target.get("pipeline_record"), config_attr, target["extracted_value"]
-                    )
-                    selection_judgments = classify_by_category(
-                        sample,
-                        target,
-                        term_str,
-                        config_attr,
-                        selection_categories,
-                        "selection",
-                        url,
-                        headers,
-                        candidates=candidates,
-                        verbose=verbose
-                    )
-                elif verbose:
-                    print("    [selection] skipped: not selected by the mk2 select stage", file=sys.stderr)
-            row = [
-                bs_id,
-                format_tsv_value(target["extracted_value"]),
-                term_id,
-                term_label,
-                content,
-                format_prob(emitted_token_prob),
-                format_prob(normalized_bool_prob)
-            ]
-            if not bool_only:
-                row += flatten_judgments(extraction_categories, extraction_judgments)
-                row += flatten_judgments(selection_categories, selection_judgments)
-            print(*row, sep="\t")
+                pending.append((future, log))
+                while len(pending) > max_pending or (pending and pending[0][0].done()):
+                    emit_oldest()
+        while pending:
+            emit_oldest()
+    finally:
+        # On error, drop rows not yet started; rows already in flight finish
+        # (at most `parallel` of them) before the exception propagates.
+        executor.shutdown(wait=True, cancel_futures=True)
 
     return
 
@@ -658,9 +722,12 @@ def main():
     parser.add_argument("-a", '--config_attr', help='Attribute name, defined in config file, to be used for this run ', required=True)
     parser.add_argument("-u", '--url', help='URL of llama.cpp endpoint', required=True)
     parser.add_argument("-v", '--verbose', action="store_true", help='Print per-row and per-category progress to stderr')
+    parser.add_argument("-j", "--parallel", type=int, default=1, help='Number of concurrent requests to the llama.cpp endpoint; match the server\'s -np/--parallel slots. Output row order is unchanged. Default: 1')
     parser.add_argument("--bool_only", action="store_true", help='Only run the first-pass mapping correctness judgment; skip the extraction/selection category classification pass')
 
     args = parser.parse_args()
+    if args.parallel < 1:
+        parser.error("--parallel must be at least 1")
     try:
         # Load ontology
         print("Loading ontology...", file=sys.stderr)
@@ -698,7 +765,8 @@ def main():
             args.config_attr,
             error_categories,
             args.verbose,
-            args.bool_only
+            args.bool_only,
+            args.parallel
         )
         total_time = time.time() - start_time
         print(f"Evaluation completed in {total_time:.2f} seconds", file=sys.stderr)

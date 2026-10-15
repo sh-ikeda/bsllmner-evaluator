@@ -30,6 +30,7 @@ python bsllmner-evaluator.py -c input/evaluation_config.json -r examples/select_
 `--error_category_file`: Path to the JSON file defining error categories. Default is `input/error_categories.json`.
 `-u`: URL of the llama.cpp `/v1/chat/completions` endpoint.
 `-v`: Print per-row and per-category progress to stderr.
+`-j`, `--parallel`: Number of concurrent requests to the llama.cpp endpoint. Set it to match the server's `-np`/`--parallel` slots. Rows are still written in input order; with `-j` greater than 1, each row's stderr messages are printed together once the row is done. Default is 1.
 `--bool_only`: Only run the first-pass mapping correctness judgment (`mapping_decision` and its probabilities); skip the extraction/selection category classification pass entirely. The output TSV then has only the first 7 columns, and `--error_category_file` is not read.
 
 ## Format
