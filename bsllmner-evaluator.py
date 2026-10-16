@@ -191,28 +191,45 @@ def load_target_json(json_file, config_attr):
         results = record.get("results", {})
         attr_results = results.get(config_attr)
         entries = []
+        mapped_values = set()
 
-        if attr_results:
-            for mapped_term in attr_results:
-                value = mapped_term.get("value", "")
-                entries.append({
-                    "term_id": mapped_term.get("term_id", ""),
-                    "term_label": mapped_term.get("label", ""),
-                    "extracted_value": value,
-                    "pipeline_record": record,
-                    "selection_performed": selection_was_performed(record, config_attr, value)
-                })
-        else:
-            extracted = record.get("extract", {}).get("extracted")
-            extracted_value = ""
-            if isinstance(extracted, dict) and config_attr in extracted:
-                extracted_value = extracted[config_attr]
-            elif extracted is None:
-                extracted_value = None
+        for mapped_term in attr_results or []:
+            value = mapped_term.get("value", "")
+            mapped_values.add(value)
+            entries.append({
+                "term_id": mapped_term.get("term_id", ""),
+                "term_label": mapped_term.get("label", ""),
+                "extracted_value": value,
+                "pipeline_record": record,
+                "selection_performed": selection_was_performed(record, config_attr, value)
+            })
+
+        extracted = record.get("extract", {}).get("extracted")
+        extracted_value = ""
+        if isinstance(extracted, dict) and config_attr in extracted:
+            extracted_value = extracted[config_attr]
+        elif extracted is None:
+            extracted_value = None
+
+        # Multi-valued attributes (knockout_gene, drug, ...) are extracted as a
+        # list; each value that got no mapping gets its own non-mapped row,
+        # whether or not other values of the same list were mapped.
+        unmapped_values = []
+        if isinstance(extracted_value, list):
+            for value in extracted_value:
+                if value and value not in mapped_values and value not in unmapped_values:
+                    unmapped_values.append(value)
+            if not entries and not unmapped_values:
+                # An empty list is reported like a missing extraction.
+                unmapped_values.append("")
+        elif not entries:
+            unmapped_values.append(extracted_value)
+
+        for value in unmapped_values:
             entries.append({
                 "term_id": "",
                 "term_label": "",
-                "extracted_value": extracted_value,
+                "extracted_value": value,
                 "pipeline_record": record,
                 "selection_performed": True
             })

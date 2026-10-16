@@ -71,6 +71,8 @@ BioSample ID、抽出された値、マッピングされたオントロジー�
 6. `mapping_probability` — 出力された最初のトークンの確率。
 7. `mapping_normalized_probability` — 完全一致する `true` と `false` の候補の中で正規化した確率（算出できた場合）。
 
+1 行が 1 つの評価対象の値に対応します。JSON 入力でリストとして抽出された属性（`knockout_gene`、`drug` など）では、マッピングされた値ごとに 1 行、マッピングが得られなかった抽出値ごとに非マッピング行（`term_id` が空）を 1 行出力します。そのため `extracted_value` は常に単一の文字列です。
+
 その後に、`input/error_categories.json` で定義されたエラーカテゴリごとに 4 列が続きます（まず `extraction` の全カテゴリ、次に `selection` の全カテゴリを、ファイル内の順に並べます）: `{category_id}_decision`、`{category_id}_probability`、`{category_id}_normalized_probability`、`{category_id}_reason`。`--bool_only` を指定した場合、これらの列はすべて省略されます。
 
 各カテゴリは独立した yes/no の質問（「このカテゴリの説明は当てはまるか？」）として問い合わせるため、すべてのカテゴリがそれぞれ判定を持ちます。段階ごとにカテゴリを 1 つだけ選ぶ形ではありません。extraction カテゴリは、`mapping_decision` が `false` で、かつ `term_id` が空でない場合に問い合わせます。それ以外の場合は（カテゴリを問い合わせていないので）列はすべて空になります。selection カテゴリも同じ条件で問い合わせますが、もう 1 つ条件があります。JSON 入力では、bsllmner-mk2 がオントロジー検索/text2term の完全一致（Stage 2）で解決した値は LLM による選択ステップ（Stage 3）に到達していないため、その値については selection カテゴリを問い合わせません。これは select 出力 JSON の `select_timings` フィールドから判定します（そこに値がなければ、その値について Stage 3 は呼ばれていません）。TSV 入力にはこうしたパイプラインの詳細が含まれないため、selection カテゴリは extraction と同じ条件で常に問い合わせます。`probability`/`normalized_probability` は 6/7 列目と同じ定義で、そのカテゴリの `true`/`false` の判定トークンについて計算したものです。`reason` はモデルによる短い 1 文の説明です。
