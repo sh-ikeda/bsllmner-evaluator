@@ -312,6 +312,12 @@ These are all the ontology candidates that were actually offered to the selectio
 
 {stage_instruction}
 
+Note that a sample can have more than one valid value for the "{config_attr}" attribute \
+(for example, several knocked-out genes or several drugs), and the pipeline handles each \
+value separately. This evaluation concerns only the single value shown above. Do not \
+consider whether other values in the metadata should also have been extracted or mapped; \
+the presence of other relevant values is not an error for this {stage}.
+
 Consider whether the following statement correctly describes this {stage}:
 
 "{category['description']}"
