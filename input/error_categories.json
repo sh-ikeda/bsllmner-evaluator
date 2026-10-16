@@ -10,7 +10,7 @@
     },
     {
       "id": "extraction_partial_or_boundary_error",
-      "description": "The extraction used the wrong text boundary, such as taking only part of a composite expression or including extra words, causing the extracted value to mean something different from the BioSample metadata."
+      "description": "The extraction used the wrong text boundary, such as taking only part of a composite expression or including extra words, so that the extracted value no longer correctly denotes the concept that the evaluated attribute asks for. Judge the boundary relative to the evaluated attribute, not relative to the whole metadata field value: taking only the part of a composite expression that is relevant to the attribute is correct extraction, not a boundary error. For example, extracting \"breast\" as tissue from \"tissue: breast cancer\" is correct, whereas extracting \"small cell lung cancer\" as disease from \"non-small cell lung cancer\" is a boundary error because the truncated string denotes a different disease."
     },
     {
       "id": "extraction_hallucination",
