@@ -30,7 +30,7 @@ def main():
                 print(sample_id, "(null)", "", "", sep="\t")
             ##
             else:
-                print(sample_id, sample["extract"]["extracted"][attr], "", "", sep="\t")
+                print(sample_id, sample["extract"]["extracted"].get(attr, ""), "", "", sep="\t")
     return
 
 if __name__ == "__main__":
